@@ -1,0 +1,76 @@
+:root {
+  --grass-green: #15803d;
+  --pitch-line: rgba(255, 255, 255, 0.8);
+  --net-color: rgba(255, 255, 255, 0.4);
+}
+
+body {
+  margin: 0;
+  background: #064e3b;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: white;
+  overflow: hidden;
+}
+
+.game-container {
+  position: relative;
+  background: var(--grass-green);
+  padding: 10px;
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 0 100px rgba(0, 0, 0, 0.1);
+  border: 8px solid #065f46;
+}
+
+canvas {
+  background: var(--grass-green);
+  cursor: none;
+  display: block;
+}
+
+.ui-overlay {
+  position: absolute;
+  top: 20px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 60px;
+  pointer-events: none;
+  font-size: 3rem;
+  font-weight: 800;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.controls-hint {
+  margin-top: 20px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  display: flex;
+  gap: 30px;
+}
+
+.kbd {
+  background: #334155;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  color: #94a3b8;
+}
+
+#leaderboard::-webkit-scrollbar {
+  width: 5px;
+}
+#leaderboard::-webkit-scrollbar-track {
+  background: transparent;
+}
+#leaderboard::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 5px;
+}

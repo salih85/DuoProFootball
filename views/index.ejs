@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Duo Pro Football - Online Edition</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+
+<body>
+
+    <div class="game-container">
+        <div class="ui-overlay">
+            <div id="score1">0</div>
+            <div id="goalText" style="opacity: 0; transition: opacity 0.3s; color: #fbbf24; font-size: 2rem;">GOAL!
+            </div>
+            <div id="score2">0</div>
+        </div>
+        <canvas id="gameCanvas" width="900" height="500"></canvas>
+
+        <!-- Leaderboard Overlay -->
+        <div id="leaderboard"
+            style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; width: 180px; font-size: 0.8rem; border: 1px solid #334155; backdrop-filter: blur(4px);">
+            <h3 style="margin: 0 0 10px 0; border-bottom: 1px solid #444; color: #fbbf24;">Recent Matches</h3>
+            <div id="scoreList" style="max-height: 200px; overflow-y: auto;">Loading...</div>
+            <button onclick="resetMatch()"
+                style="margin-top: 15px; width: 100%; background: #ef4444; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: background 0.2s;">
+                Reset Match
+            </button>
+        </div>
+    </div>
+
+    <div class="controls-hint">
+        <span><b>Player 1 (Blue):</b> <span class="kbd">W</span> <span class="kbd">A</span> <span class="kbd">S</span>
+            <span class="kbd">D</span></span>
+        <span><b>Player 2 (Red):</b> <span class="kbd">↑</span> <span class="kbd">←</span> <span class="kbd">↓</span>
+            <span class="kbd">→</span></span>
+    </div>
+
+    <script src="/js/game.js"></script>
+</body>
+
+</html>
