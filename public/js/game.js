@@ -53,6 +53,12 @@ let ball = { x: WIDTH / 2, y: HEIGHT / 2, radius: 18, dx: 0, dy: 0 };
 let p1 = { x: 240, y: 400, radius: 35, color: '#3b82f6', score: 0 };
 let p2 = { x: 960, y: 400, radius: 35, color: '#ef4444', score: 0 };
 
+// Network Sync State (Lerping)
+let lastEmitTime = 0;
+let p1Target = { x: 240, y: 400 };
+let p2Target = { x: 960, y: 400 };
+let ballTarget = { x: WIDTH / 2, y: HEIGHT / 2 };
+
 // Global Settings (v16)
 let currentAiDifficulty = 'pro';
 let currentWinLimit = 5;
@@ -323,14 +329,20 @@ socket.on('opponentDisconnected', () => {
 
 function syncState(state) {
     if (role === 'p1') {
-        p2.x = state.p2.x;
-        p2.y = state.p2.y;
+        p2Target.x = state.p2.x;
+        p2Target.y = state.p2.y;
     } else {
-        p1.x = state.p1.x;
-        p1.y = state.p1.y;
+        p1Target.x = state.p1.x;
+        p1Target.y = state.p1.y;
     }
-    ball.x = state.ball.x;
-    ball.y = state.ball.y;
+
+    // Snap ball if it diverges too much, let local physics handle minor discrepancies
+    const ballDist = Math.hypot(ball.x - state.ball.x, ball.y - state.ball.y);
+    if (ballDist > 15) {
+        ball.x = state.ball.x;
+        ball.y = state.ball.y;
+    }
+    // Always trust velocity from server state for ball
     ball.dx = state.ball.dx;
     ball.dy = state.ball.dy;
 }
@@ -369,9 +381,13 @@ function update() {
         const dx = targetTouchPos.x - me.x;
         const dy = targetTouchPos.y - me.y;
         const dist = Math.hypot(dx, dy);
-        if (dist > 5) {
-            me.x += (dx / dist) * PLAYER_SPEED;
-            me.y += (dy / dist) * PLAYER_SPEED;
+
+        // Smooth easing towards touch instead of rigid steps
+        if (dist > 2) {
+            // Decelerate as we get closer to avoid jitter
+            const speed = Math.min(PLAYER_SPEED, dist * 0.3);
+            me.x += (dx / dist) * speed;
+            me.y += (dy / dist) * speed;
         }
     }
 
@@ -429,8 +445,23 @@ function update() {
         p2.y = Math.max(p2.radius, Math.min(HEIGHT - p2.radius, p2.y));
     }
 
+    // Apply Lerping for network opponent
+    if (gameMode === 'online') {
+        let opponent = role === 'p1' ? p2 : p1;
+        let target = role === 'p1' ? p2Target : p1Target;
+
+        // Glide towards target
+        opponent.x += (target.x - opponent.x) * 0.3;
+        opponent.y += (target.y - opponent.y) * 0.3;
+    }
+
     if (gameMode === 'online' && (me.x !== oldX || me.y !== oldY)) {
-        socket.emit('playerUpdate', { x: me.x, y: me.y });
+        const now = Date.now();
+        // Throttle emissions to ~30Hz (every 33ms) instead of 60Hz to save bandwidth and reduce lag
+        if (now - lastEmitTime > 33) {
+            socket.emit('playerUpdate', { x: me.x, y: me.y });
+            lastEmitTime = now;
+        }
     }
 
     // collision logic
@@ -540,6 +571,11 @@ function resetMatchLocal() {
 
     p1.x = 240; p1.y = 400;
     p2.x = 960; p2.y = 400;
+
+    // Reset targets too so they don't lerp across the field
+    p1Target = { x: 240, y: 400 };
+    p2Target = { x: 960, y: 400 };
+    ballTarget = { x: WIDTH / 2, y: HEIGHT / 2 };
 }
 
 function draw() {
