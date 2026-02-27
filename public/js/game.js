@@ -15,41 +15,201 @@ const GOAL_Y = (HEIGHT - GOAL_HEIGHT) / 2;
 // UI Elements
 const lobbyOverlay = document.getElementById('lobby-overlay');
 const gameContainer = document.getElementById('game-container');
-const findMatchBtn = document.getElementById('findMatchBtn');
+const openComputerModalBtn = document.getElementById('openComputerModal');
+const openOnlineModalBtn = document.getElementById('openOnlineModal');
+const computerModal = document.getElementById('computerModal');
+const onlineModal = document.getElementById('onlineModal');
+const cancelSearchBtn = document.getElementById('cancelSearchBtn');
 const searchingText = document.getElementById('searching-text');
 const score1El = document.getElementById('score1');
 const score2El = document.getElementById('score2');
 const goalTextEl = document.getElementById('goalText');
 
+// Modal Elements (v16)
+const startComputerBtn = document.getElementById('startComputerBtn');
+const startOnlineBtn = document.getElementById('startOnlineBtn');
+const compDifficultySelect = document.getElementById('compDifficulty');
+const compWinLimitSelect = document.getElementById('compWinLimit');
+const onlineWinLimitSelect = document.getElementById('onlineWinLimit');
+const createRoomBtn = document.getElementById('createRoomBtn');
+const joinRoomInput = document.getElementById('joinRoomInput');
+const displayRoomCode = document.getElementById('displayRoomCode');
+const roomCodeArea = document.getElementById('roomCodeArea');
+const countdownOverlay = document.getElementById('countdown-overlay');
+const countdownText = document.getElementById('countdown-text');
+
 // Game State
 let role = null; // 'p1' or 'p2'
 let roomId = null;
 let status = 'waiting';
+let gameMode = 'online'; // 'online' or 'computer'
+let onlineType = 'random'; // 'random' or 'private'
+let isVertical = false;
+let isPaused = false;
 let keys = {};
 let targetTouchPos = null;
-let isVertical = false;
 
 let ball = { x: WIDTH / 2, y: HEIGHT / 2, radius: 18, dx: 0, dy: 0 };
 let p1 = { x: 240, y: 400, radius: 35, color: '#3b82f6', score: 0 };
 let p2 = { x: 960, y: 400, radius: 35, color: '#ef4444', score: 0 };
 
+// Global Settings (v16)
+let currentAiDifficulty = 'pro';
+let currentWinLimit = 5;
+let currentP1Color = '#3b82f6';
+let currentP2Color = '#ef4444';
+
 // Initialize
 function init() {
     setupInput();
     setupTouch();
+    setupModals();
     window.addEventListener('resize', resizeCanvas);
     window.addEventListener('orientationchange', resizeCanvas);
     resizeCanvas();
+}
+
+function updateScorecardColors() {
+    const p1Card = document.getElementById('p1-card');
+    const p2Card = document.getElementById('p2-card');
+    if (p1Card) p1Card.style.setProperty('--card-bg', currentP1Color + '44'); // Add transparency
+    if (p2Card) p2Card.style.setProperty('--card-bg', currentP2Color + '44');
+    // Also update player objects for rendering
+    p1.color = currentP1Color;
+    p2.color = currentP2Color;
+}
+
+function setupModals() {
+    // Open Modals
+    openComputerModalBtn.addEventListener('click', () => computerModal.classList.remove('hidden'));
+    openOnlineModalBtn.addEventListener('click', () => onlineModal.classList.remove('hidden'));
+
+    // Close Modals
+    document.querySelectorAll('.close-modal').forEach(btn => {
+        btn.addEventListener('click', () => {
+            computerModal.classList.add('hidden');
+            onlineModal.classList.add('hidden');
+        });
+    });
+
+    // Tab Switching (Online Modal)
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const mode = btn.dataset.mode;
+            onlineType = mode;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            document.getElementById('online-random-content').classList.toggle('hidden', mode !== 'random');
+            document.getElementById('online-private-content').classList.toggle('hidden', mode !== 'private');
+        });
+    });
+
+    // Color Pickers
+    setupColorPicker('compColorPicker', (color) => { currentP1Color = color; updateScorecardColors(); });
+    setupColorPicker('onlineColorPicker', (color) => { currentP1Color = color; updateScorecardColors(); });
+
+    function setupColorPicker(id, callback) {
+        const picker = document.getElementById(id);
+        const swatches = picker.querySelectorAll('.swatch');
+        swatches.forEach(swatch => {
+            swatch.addEventListener('click', () => {
+                swatches.forEach(s => s.classList.remove('active'));
+                swatch.classList.add('active');
+                callback(swatch.dataset.color);
+            });
+        });
+    }
+
+    // Create Private Room
+    createRoomBtn.addEventListener('click', () => {
+        const limit = parseInt(onlineWinLimitSelect.value);
+        socket.emit('createPrivateRoom', { color: currentP1Color, winLimit: limit });
+    });
+
+    socket.on('privateRoomCreated', (data) => {
+        displayRoomCode.innerText = data.roomId;
+        roomCodeArea.classList.remove('hidden');
+        createRoomBtn.classList.add('hidden');
+    });
+
+    document.getElementById('copyCodeBtn').addEventListener('click', () => {
+        navigator.clipboard.writeText(displayRoomCode.innerText);
+        alert('Room code copied!');
+    });
 }
 
 function setupInput() {
     window.addEventListener('keydown', e => keys[e.code] = true);
     window.addEventListener('keyup', e => keys[e.code] = false);
 
-    findMatchBtn.addEventListener('click', () => {
-        findMatchBtn.classList.add('hidden');
+    startComputerBtn.addEventListener('click', () => {
+        gameMode = 'computer';
+        role = 'p1';
+        status = 'waiting';
+        currentAiDifficulty = compDifficultySelect.value;
+        currentWinLimit = parseInt(compWinLimitSelect.value);
+
+        p1.score = 0; p2.score = 0;
+        score1El.innerText = "0"; score2El.innerText = "0";
+        currentP2Color = '#ef4444'; // AI Default
+        updateScorecardColors();
+
+        computerModal.classList.add('hidden');
+        lobbyOverlay.classList.add('hidden');
+        gameContainer.classList.remove('hidden');
+
+        resizeCanvas();
+        resetMatchLocal();
+        draw(); // Draw behind the countdown
+
+        // Start 5 second countdown
+        countdownOverlay.classList.remove('hidden');
+        countdownText.innerText = "5";
+
+        let counter = 5;
+        const countdownInterval = setInterval(() => {
+            counter--;
+            if (counter > 0) {
+                countdownText.innerText = counter;
+            } else {
+                clearInterval(countdownInterval);
+                countdownOverlay.classList.add('hidden');
+
+                resizeCanvas();
+                resetMatchLocal();
+                status = 'playing';
+                requestAnimationFrame(loop);
+            }
+        }, 1000);
+    });
+
+    startOnlineBtn.addEventListener('click', () => {
+        gameMode = 'online';
+        onlineModal.classList.add('hidden');
+        lobbyOverlay.classList.remove('hidden'); // Show searching state
         searchingText.classList.remove('hidden');
-        socket.emit('findMatch');
+        document.querySelector('.mode-selection').classList.add('hidden');
+
+        if (onlineType === 'random') {
+            socket.emit('findMatch', { color: currentP1Color });
+        } else {
+            const code = joinRoomInput.value.trim().toUpperCase();
+            if (code) {
+                socket.emit('joinPrivateRoom', { roomId: code, color: currentP1Color });
+            } else {
+                // If they created but didn't join... just wait for opponent? 
+                // Actually they already join on create. So this just handles "Join" case.
+                if (displayRoomCode.innerText === "----") {
+                    alert("Please enter a room code or create one.");
+                    location.reload();
+                }
+            }
+        }
+    });
+
+    cancelSearchBtn.addEventListener('click', () => {
+        location.reload();
     });
 }
 
@@ -104,10 +264,23 @@ function resizeCanvas() {
 socket.on('matchFound', (data) => {
     roomId = data.roomId;
     role = data.role;
+    currentWinLimit = data.winLimit;
+
+    // Sync colors from server state
+    currentP1Color = data.state.p1.color;
+    currentP2Color = data.state.p2.color;
+    updateScorecardColors();
+
     syncState(data.state);
 });
 
+socket.on('matchError', (data) => {
+    alert(data.message);
+    location.reload();
+});
+
 socket.on('gameStart', (state) => {
+    if (gameMode !== 'online') return;
     status = 'playing';
     syncState(state);
     lobbyOverlay.classList.add('hidden');
@@ -116,19 +289,23 @@ socket.on('gameStart', (state) => {
     // CRITICAL: Force resize after showing container to fix rendering bug
     resizeCanvas();
     setTimeout(resizeCanvas, 50);
+    setTimeout(resizeCanvas, 150); // Extra safety for slow mobile engines
 
     requestAnimationFrame(loop);
 });
 
 socket.on('stateUpdate', (state) => {
+    if (gameMode !== 'online') return;
     syncState(state);
 });
 
 socket.on('scoreSync', (data) => {
+    if (gameMode !== 'online') return;
     p1.score = data.score1;
     p2.score = data.score2;
     score1El.innerText = p1.score;
     score2El.innerText = p2.score;
+    resetMatchLocal(); // FORCE RESET POSITIONS LOCALLY
     showGoal();
 });
 
@@ -139,6 +316,7 @@ socket.on('gameOver', (data) => {
 });
 
 socket.on('opponentDisconnected', () => {
+    if (gameMode !== 'online') return;
     alert("Opponent disconnected. Match ended.");
     location.reload();
 });
@@ -158,17 +336,28 @@ function syncState(state) {
 }
 
 function showGoal() {
+    isPaused = true;
+
+    // Haptic Feedback (v15)
+    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+
+    resetMatchLocal();
     goalTextEl.classList.add('show');
-    setTimeout(() => goalTextEl.classList.remove('show'), 1500);
+    setTimeout(() => {
+        goalTextEl.classList.remove('show');
+        resetMatchLocal(); // RE-SET FOR RESUME
+        isPaused = false;
+    }, 1500);
 }
 
 function update() {
-    if (status !== 'playing') return;
+    if (status !== 'playing' || isPaused) return;
 
     let me = role === 'p1' ? p1 : p2;
     let oldX = me.x;
     let oldY = me.y;
 
+    // Movement logic for current player
     // keyboard
     if (keys['KeyW'] || keys['ArrowUp']) me.y -= PLAYER_SPEED;
     if (keys['KeyS'] || keys['ArrowDown']) me.y += PLAYER_SPEED;
@@ -186,15 +375,61 @@ function update() {
         }
     }
 
-    // boundaries
-    if (role === 'p1') {
-        me.x = Math.max(me.radius, Math.min(WIDTH / 2 - me.radius, me.x));
-    } else {
-        me.x = Math.max(WIDTH / 2 + me.radius, Math.min(WIDTH - me.radius, me.x));
-    }
-    me.y = Math.max(me.radius, Math.min(HEIGHT - me.radius, me.y));
+    // AI logic for computer player
+    if (gameMode === 'computer') {
+        const difficultyMultipliers = {
+            'easy': { speed: 0.6, ease: 0.08, prediction: 2 },
+            'pro': { speed: 0.9, ease: 0.12, prediction: 4 },
+            'legend': { speed: 1.2, ease: 0.2, prediction: 7 }
+        };
+        const settings = difficultyMultipliers[currentAiDifficulty];
+        const aiEase = settings.ease;
 
-    if (me.x !== oldX || me.y !== oldY) {
+        // AI PATIENCE: Stay at goal line until ball starts moving
+        const ballInPlay = Math.abs(ball.dx) > 0.1 || Math.abs(ball.dy) > 0.1;
+
+        // CORNER CHECK: If AI is in the corner, escape!
+        const isInCorner = (p2.x > WIDTH - 100 && (p2.y < 100 || p2.y > HEIGHT - 100));
+
+        let targetY, targetX;
+
+        if (!ballInPlay) {
+            // Kickoff Position
+            targetY = HEIGHT / 2;
+            targetX = 960;
+        } else if (isInCorner) {
+            // Safety: Move back toward the center of the half
+            targetY = HEIGHT / 2;
+            targetX = WIDTH * 0.8;
+        } else {
+            // Standard tracking logic
+            targetY = ball.y + ball.dy * settings.prediction;
+            targetY = Math.max(p2.radius, Math.min(HEIGHT - p2.radius, targetY));
+
+            if (ball.x > WIDTH * 0.45) {
+                // Chases ball up to the halfway line
+                targetX = Math.max(WIDTH * 0.55, ball.x - 40);
+            } else {
+                // Retreats to defend
+                targetX = WIDTH * 0.88;
+            }
+        }
+
+        p2.y += (targetY - p2.y) * aiEase;
+        p2.x += (targetX - p2.x) * aiEase;
+    }
+
+    // boundaries
+    if (role === 'p1' || gameMode === 'computer') {
+        p1.x = Math.max(p1.radius, Math.min(WIDTH / 2 - p1.radius, p1.x));
+        p1.y = Math.max(p1.radius, Math.min(HEIGHT - p1.radius, p1.y));
+    }
+    if (role === 'p2' || gameMode === 'computer') {
+        p2.x = Math.max(WIDTH / 2 + p2.radius, Math.min(WIDTH - p2.radius, p2.x));
+        p2.y = Math.max(p2.radius, Math.min(HEIGHT - p2.radius, p2.y));
+    }
+
+    if (gameMode === 'online' && (me.x !== oldX || me.y !== oldY)) {
         socket.emit('playerUpdate', { x: me.x, y: me.y });
     }
 
@@ -205,32 +440,33 @@ function update() {
     ball.dx *= FRICTION;
     ball.dy *= FRICTION;
 
-    // Collisions (Simulated for both)
+    // Collisions
     [p1, p2].forEach(p => {
         const dist = Math.hypot(ball.x - p.x, ball.y - p.y);
         if (dist < ball.radius + p.radius) {
             const angle = Math.atan2(ball.y - p.y, ball.x - p.x);
-            const force = 12;
+            const force = 22; // Increased from 12 for faster ball on 1200px field
             ball.dx = Math.cos(angle) * force;
             ball.dy = Math.sin(angle) * force;
             ball.x = p.x + Math.cos(angle) * (ball.radius + p.radius + 1);
             ball.y = p.y + Math.sin(angle) * (ball.radius + p.radius + 1);
 
-            if ((role === 'p1' && p === p1) || (role === 'p2' && p === p2)) {
+            if (gameMode === 'online' && ((role === 'p1' && p === p1) || (role === 'p2' && p === p2))) {
                 socket.emit('ballUpdate', { x: ball.x, y: ball.y, dx: ball.dx, dy: ball.dy });
             }
         }
     });
 
-    // Player Reflact
+    // Player Reflection
     const pDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
     if (pDist < p1.radius + p2.radius) {
         const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
         const overlap = (p1.radius + p2.radius - pDist) / 2;
-        if (role === 'p1') {
+        if (gameMode === 'computer' || role === 'p1') {
             p1.x -= Math.cos(angle) * overlap;
             p1.y -= Math.sin(angle) * overlap;
-        } else {
+        }
+        if (gameMode === 'computer' || role === 'p2') {
             p2.x += Math.cos(angle) * overlap;
             p2.y += Math.sin(angle) * overlap;
         }
@@ -246,8 +482,15 @@ function update() {
         const isGoalArea = ball.y > GOAL_Y && ball.y < GOAL_Y + GOAL_HEIGHT;
         if (isGoalArea) {
             if (ball.x < -ball.radius) {
-                socket.emit('goal', { score1: p1.score, score2: p2.score + 1 });
-                resetMatchLocal();
+                if (gameMode === 'online') {
+                    socket.emit('goal', { score1: p1.score, score2: p2.score + 1 });
+                } else {
+                    p2.score++;
+                    score2El.innerText = p2.score;
+                    showGoal();
+                    if (p2.score >= currentWinLimit) triggerGameOver('Computer');
+                    else resetMatchLocal();
+                }
             }
         } else {
             ball.dx *= -1;
@@ -259,8 +502,15 @@ function update() {
         const isGoalArea = ball.y > GOAL_Y && ball.y < GOAL_Y + GOAL_HEIGHT;
         if (isGoalArea) {
             if (ball.x > WIDTH + ball.radius) {
-                socket.emit('goal', { score1: p1.score + 1, score2: p2.score });
-                resetMatchLocal();
+                if (gameMode === 'online') {
+                    socket.emit('goal', { score1: p1.score + 1, score2: p2.score });
+                } else {
+                    p1.score++;
+                    score1El.innerText = p1.score;
+                    showGoal();
+                    if (p1.score >= currentWinLimit) triggerGameOver('Player 1');
+                    else resetMatchLocal();
+                }
             }
         } else {
             ball.dx *= -1;
@@ -269,11 +519,25 @@ function update() {
     }
 }
 
+function triggerGameOver(winner) {
+    status = 'finished';
+    document.getElementById('game-over-overlay').classList.remove('hidden');
+    document.getElementById('winner-text').innerText = `${winner} Wins!`;
+}
+
 function resetMatchLocal() {
     ball.x = WIDTH / 2;
     ball.y = HEIGHT / 2;
-    ball.dx = 0;
-    ball.dy = 0;
+
+    if (gameMode === 'computer') {
+        // Auto-push ball to start the action
+        ball.dx = (Math.random() > 0.5 ? 1 : -1) * 6;
+        ball.dy = (Math.random() - 0.5) * 8;
+    } else {
+        ball.dx = 0;
+        ball.dy = 0;
+    }
+
     p1.x = 240; p1.y = 400;
     p2.x = 960; p2.y = 400;
 }

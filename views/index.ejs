@@ -23,25 +23,147 @@
     </div>
 
     <div id="lobby-overlay" class="overlay">
-        <div class="glass-card">
-            <h1>Duo Pro Football</h1>
-            <p>Ready for a match?</p>
-            <button id="findMatchBtn" class="premium-btn">Find Match</button>
+        <div class="lobby-content">
+            <h1 class="game-title">DUO PRO FOOTBALL</h1>
+            <p class="game-subtitle">Elite Multi-Player Experience</p>
+
+            <div class="mode-selection">
+                <button id="openComputerModal" class="premium-btn computer">
+                    <span class="icon">🤖</span>
+                    <span class="text">VS Computer</span>
+                </button>
+                <button id="openOnlineModal" class="premium-btn online">
+                    <span class="icon">🌍</span>
+                    <span class="text">Online Match</span>
+                </button>
+            </div>
+
             <div id="searching-text" class="hidden">
                 <div class="loader"></div>
                 <p>Searching for opponent...</p>
+                <button id="cancelSearchBtn" class="premium-btn secondary">Cancel Search</button>
             </div>
         </div>
     </div>
 
+    <!-- Computer Settings Modal -->
+    <div id="computerModal" class="overlay hidden">
+        <div class="glass-card modal-content">
+            <h2 class="modal-title">VS COMPUTER</h2>
+            <div class="settings-grid">
+                <div class="setting-item">
+                    <p class="setting-label">Your Jersey Color</p>
+                    <div class="color-picker" id="compColorPicker">
+                        <div class="swatch active" data-color="#3b82f6" style="background: #3b82f6;"></div>
+                        <div class="swatch" data-color="#10b981" style="background: #10b981;"></div>
+                        <div class="swatch" data-color="#f59e0b" style="background: #f59e0b;"></div>
+                        <div class="swatch" data-color="#ef4444" style="background: #ef4444;"></div>
+                        <div class="swatch" data-color="#ffffff" style="background: #ffffff;"></div>
+                    </div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-group">
+                        <p class="setting-label">AI Difficulty</p>
+                        <select id="compDifficulty" class="premium-select">
+                            <option value="easy">Easy</option>
+                            <option value="pro" selected>Pro</option>
+                            <option value="legend">Legend</option>
+                        </select>
+                    </div>
+                    <div class="setting-group">
+                        <p class="setting-label">Win Limit</p>
+                        <select id="compWinLimit" class="premium-select">
+                            <option value="3">3 Goals</option>
+                            <option value="5" selected>5 Goals</option>
+                            <option value="10">10 Goals</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="startComputerBtn" class="premium-btn">Play Now</button>
+                <button class="close-modal premium-btn secondary">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Online Settings Modal -->
+    <div id="onlineModal" class="overlay hidden">
+        <div class="glass-card modal-content">
+            <h2 class="modal-title">ONLINE MATCH</h2>
+            <div class="settings-grid">
+                <div class="setting-item">
+                    <p class="setting-label">Your Jersey Color</p>
+                    <div class="color-picker" id="onlineColorPicker">
+                        <div class="swatch active" data-color="#3b82f6" style="background: #3b82f6;"></div>
+                        <div class="swatch" data-color="#10b981" style="background: #10b981;"></div>
+                        <div class="swatch" data-color="#f59e0b" style="background: #f59e0b;"></div>
+                        <div class="swatch" data-color="#ef4444" style="background: #ef4444;"></div>
+                        <div class="swatch" data-color="#ffffff" style="background: #ffffff;"></div>
+                    </div>
+                </div>
+
+                <div class="private-room-section">
+                    <div class="tab-buttons">
+                        <button class="tab-btn active" data-mode="random">Matchmaking</button>
+                        <button class="tab-btn" data-mode="private">Play with Friends</button>
+                    </div>
+
+                    <div id="online-random-content" class="tab-content">
+                        <p class="info-text">Battle against any player online!</p>
+                    </div>
+
+                    <div id="online-private-content" class="tab-content hidden">
+                        <div class="room-options">
+                            <div class="option-create">
+                                <p class="setting-label">Create Room</p>
+                                <button id="createRoomBtn" class="premium-btn secondary small">Get Room Code</button>
+                                <div id="roomCodeArea" class="room-code-area hidden">
+                                    <span id="displayRoomCode">----</span>
+                                    <button id="copyCodeBtn" class="icon-btn">📋</button>
+                                </div>
+                                <div class="setting-group compact">
+                                    <p class="setting-label">Win Limit</p>
+                                    <select id="onlineWinLimit" class="premium-select">
+                                        <option value="3">3 Goals</option>
+                                        <option value="5" selected>5 Goals</option>
+                                        <option value="10">10 Goals</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="divider-v"></div>
+                            <div class="option-join">
+                                <p class="setting-label">Join Room</p>
+                                <input type="text" id="joinRoomInput" placeholder="Enter Code" maxlength="5">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="startOnlineBtn" class="premium-btn online">Ready to Play</button>
+                <button class="close-modal premium-btn secondary">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Countdown Overlay -->
+    <div id="countdown-overlay" class="overlay hidden"
+        style="z-index: 200; flex-direction: column; background: rgba(0,0,0,0.85);">
+        <h1 id="countdown-text"
+            style="font-size: 8rem; color: #fbbf24; text-shadow: 0 0 20px rgba(251, 191, 36, 0.5); margin: 0; animation: modalPop 0.5s ease-out;">
+            5</h1>
+        <p style="color: white; font-size: 1.5rem; letter-spacing: 2px; text-transform: uppercase;">Get Ready!</p>
+    </div>
+
     <div id="game-container" class="game-container hidden">
         <div class="ui-header">
-            <div class="score-card p1-score">
+            <div id="p1-card" class="score-card p1-score">
                 <span class="label">P1</span>
                 <span id="score1">0</span>
             </div>
             <div id="goalText" class="goal-announcement">GOAL!</div>
-            <div class="score-card p2-score">
+            <div id="p2-card" class="score-card p2-score">
                 <span id="score2">0</span>
                 <span class="label">P2</span>
             </div>
