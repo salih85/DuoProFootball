@@ -11,8 +11,6 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 
 // Import Modular Components
-const connectDB = require('./config/db');
-const scoreRoutes = require('./routes/scoreRoutes');
 const viewRoutes = require('./routes/viewRoutes');
 const socketManager = require('./sockets/socketManager');
 const errorHandler = require('./middleware/errorMiddleware');
@@ -23,9 +21,6 @@ const server = http.createServer(app);
 const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
 });
-
-// Database Connection
-connectDB();
 
 // Global Middleware
 app.use(cors());
@@ -38,7 +33,6 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 // Routes
-app.use('/api', scoreRoutes);
 app.use('/', viewRoutes);
 
 // Real-time Logic (Socket.io)

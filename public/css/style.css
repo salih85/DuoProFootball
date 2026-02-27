@@ -1,76 +1,242 @@
 :root {
+  --primary: #3b82f6;
+  --secondary: #ef4444;
+  --accent: #fbbf24;
+  --bg-dark: #064e3b;
   --grass-green: #15803d;
-  --pitch-line: rgba(255, 255, 255, 0.8);
-  --net-color: rgba(255, 255, 255, 0.4);
+  --pitch-border: #065f46;
+  --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
   margin: 0;
-  background: #064e3b;
+  background-color: var(--bg-dark);
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
-  height: 100vh;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  justify-content: center;
+  min-height: 100vh;
+  font-family: var(--font-main);
   color: white;
   overflow: hidden;
+  touch-action: none;
 }
 
+/* Utilities */
+.hidden {
+  display: none !important;
+}
+
+/* Overlays & Cards */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.glass-card {
+  background: var(--grass-green);
+  border: 4px solid var(--pitch-border);
+  padding: 2rem;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  max-width: 400px;
+  width: 90%;
+}
+
+.glass-card h1 {
+  margin-top: 0;
+  font-size: 2rem;
+  color: white;
+}
+
+/* UI Header - Fixed at Top for Mobile */
+.ui-header {
+  width: 100%;
+  max-width: 1200px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  z-index: 10;
+  box-sizing: border-box;
+}
+
+.score-card {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.4rem;
+  font-weight: 800;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  min-width: 90px;
+  justify-content: center;
+}
+
+.score-card.p1-score {
+  color: var(--primary);
+}
+
+.score-card.p2-score {
+  color: var(--secondary);
+}
+
+.score-card .label {
+  font-size: 0.65rem;
+  opacity: 0.8;
+  text-transform: uppercase;
+}
+
+.goal-announcement {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: var(--accent);
+  opacity: 0;
+  transition: all 0.3s;
+  text-shadow: 2px 2px 0px #000;
+  white-space: nowrap;
+}
+
+.goal-announcement.show {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+/* Game Container - Centered and Fluid */
 .game-container {
+  width: 100%;
+  max-width: 1200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 5px;
+  box-sizing: border-box;
+}
+
+.canvas-wrapper {
   position: relative;
   background: var(--grass-green);
-  padding: 10px;
-  border-radius: 12px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 0 100px rgba(0, 0, 0, 0.1);
-  border: 8px solid #065f46;
+  border: 4px solid white;
+  box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  /* Landscape Size (Default) */
+  width: 95vw;
+  height: calc(95vw * 0.666);
+  max-width: 1200px;
+  max-height: 800px;
+  margin: 0 auto;
 }
 
 canvas {
-  background: var(--grass-green);
-  cursor: none;
+  width: 100%;
+  height: 100%;
   display: block;
 }
 
-.ui-overlay {
-  position: absolute;
-  top: 20px;
-  left: 0;
-  right: 0;
+/* Overlays - Old Modal Style */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 100;
   display: flex;
-  justify-content: space-between;
-  padding: 0 60px;
-  pointer-events: none;
-  font-size: 3rem;
-  font-weight: 800;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  align-items: center;
+  justify-content: center;
 }
 
-.controls-hint {
-  margin-top: 20px;
-  background: rgba(0, 0, 0, 0.3);
-  padding: 10px 20px;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  display: flex;
-  gap: 30px;
+.glass-card {
+  background: #000;
+  border: 3px solid #ccc;
+  padding: 2.5rem;
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
 }
 
-.kbd {
-  background: #334155;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: monospace;
-  color: #94a3b8;
+.glass-card h1 {
+  margin-top: 0;
+  font-size: 2rem;
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 2px;
 }
 
-#leaderboard::-webkit-scrollbar {
-  width: 5px;
+/* Buttons */
+.premium-btn {
+  background: #fff;
+  color: #000;
+  border: 4px solid #ccc;
+  padding: 0.8rem 1.5rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: none;
 }
-#leaderboard::-webkit-scrollbar-track {
-  background: transparent;
+
+.premium-btn:hover {
+  background: #eee;
+  border-color: #fff;
 }
-#leaderboard::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 5px;
+
+/* --- Mobile / Portrait Overrides --- */
+@media (orientation: portrait) {
+  body {
+    justify-content: flex-start;
+    /* Fix SE top-clipping */
+    padding-top: 10px;
+  }
+
+  .ui-header {
+    padding: 0.3rem 0.5rem;
+  }
+
+  .score-card {
+    font-size: 1.1rem;
+    padding: 0.3rem 0.5rem;
+    min-width: 80px;
+  }
+
+  .canvas-wrapper {
+    width: 100vw;
+    height: calc(100vw * 1.5);
+    /* Perfect Portrait Aspect */
+    max-height: 75vh;
+    /* Absolute limit to see bottom post on small screens */
+    border-width: 1px 0;
+  }
+}
+
+/* Small Screens Tweaks */
+@media (max-width: 380px) {
+  .score-card {
+    font-size: 1rem;
+    min-width: 70px;
+  }
+
+  .goal-announcement {
+    font-size: 1.4rem;
+  }
+}
+
+/* Landscape Tablet / Narrow Laptop */
+@media (max-height: 700px) and (orientation: landscape) {
+  .canvas-wrapper {
+    height: 75vh;
+    width: calc(75vh * 1.5);
+  }
 }
