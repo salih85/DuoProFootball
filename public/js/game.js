@@ -28,7 +28,6 @@ const goalTextEl = document.getElementById('goalText');
 // Modal Elements (v16)
 const startComputerBtn = document.getElementById('startComputerBtn');
 const startOnlineBtn = document.getElementById('startOnlineBtn');
-const compDifficultySelect = document.getElementById('compDifficulty');
 const compWinLimitSelect = document.getElementById('compWinLimit');
 const onlineWinLimitSelect = document.getElementById('onlineWinLimit');
 const createRoomBtn = document.getElementById('createRoomBtn');
@@ -60,7 +59,7 @@ let p2Target = { x: 960, y: 400 };
 let ballTarget = { x: WIDTH / 2, y: HEIGHT / 2 };
 
 // Global Settings (v16)
-let currentAiDifficulty = 'pro';
+let currentAiDifficulty = 'easy';
 let currentWinLimit = 5;
 let currentP1Color = '#3b82f6';
 let currentP2Color = '#ef4444';
@@ -153,7 +152,7 @@ function setupInput() {
         gameMode = 'computer';
         role = 'p1';
         status = 'waiting';
-        currentAiDifficulty = compDifficultySelect.value;
+        currentAiDifficulty = 'easy';
         currentWinLimit = parseInt(compWinLimitSelect.value);
 
         p1.score = 0; p2.score = 0;
