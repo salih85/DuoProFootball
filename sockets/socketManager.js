@@ -1,7 +1,7 @@
 const rooms = {}; // stores state for each match: { roomId: { players: [], state: {...} } }
 
 const INITIAL_STATE = {
-    ball: { x: 600, y: 400, dx: 0, dy: 0 },
+    ball: { x: 600, y: 400, dx: 0, dy: 0, owner: null },
     p1: { x: 240, y: 400, score: 0 },
     p2: { x: 960, y: 400, score: 0 },
     status: 'waiting' // waiting, playing, finished
@@ -98,7 +98,10 @@ const socketManager = (io) => {
 
         socket.on('ballUpdate', (data) => {
             if (!currentRoomId || !rooms[currentRoomId]) return;
-            rooms[currentRoomId].state.ball = data;
+            const room = rooms[currentRoomId];
+            const role = room.players[0] === socket.id ? 'p1' : 'p2';
+            room.state.ball = data;
+            room.state.ball.owner = role; // Set owner to current hitter
             // No longer broadcasting here; let the tick handle it
         });
 
@@ -107,7 +110,7 @@ const socketManager = (io) => {
             const room = rooms[currentRoomId];
             room.state.p1.score = data.score1;
             room.state.p2.score = data.score2;
-            room.state.ball = { x: 600, y: 400, dx: 0, dy: 0 };
+            room.state.ball = { x: 600, y: 400, dx: 0, dy: 0, owner: null }; // Reset owner on goal
             room.state.p1.x = 240; room.state.p1.y = 400;
             room.state.p2.x = 960; room.state.p2.y = 400;
 

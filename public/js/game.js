@@ -48,7 +48,7 @@ let isPaused = false;
 let keys = {};
 let targetTouchPos = null;
 
-let ball = { x: WIDTH / 2, y: HEIGHT / 2, radius: 18, dx: 0, dy: 0 };
+let ball = { x: WIDTH / 2, y: HEIGHT / 2, radius: 18, dx: 0, dy: 0, owner: null };
 let p1 = { x: 240, y: 400, radius: 35, color: '#3b82f6', score: 0 };
 let p2 = { x: 960, y: 400, radius: 35, color: '#ef4444', score: 0 };
 
@@ -335,22 +335,28 @@ function syncState(state) {
         p1Target.y = state.p1.y;
     }
 
-    // Ball sync: Handle drift without aggressive snapping
-    const ballDist = Math.hypot(ball.x - state.ball.x, ball.y - state.ball.y);
+    // Ball authority logic (v17.1)
+    ball.owner = state.ball.owner;
 
-    // If the ball is very far away, snap it. Otherwise, let it glide.
-    if (ballDist > 60) {
-        ball.x = state.ball.x;
-        ball.y = state.ball.y;
-    } else if (ballDist > 2) {
-        // Soft correction: gently pull the ball towards the server position
-        ball.x += (state.ball.x - ball.x) * 0.15;
-        ball.y += (state.ball.y - ball.y) * 0.15;
+    // If I am NOT the owner, I follow the server's ball state as truth
+    if (ball.owner !== role) {
+        const ballDist = Math.hypot(ball.x - state.ball.x, ball.y - state.ball.y);
+
+        // If the ball is very far away, snap it. Otherwise, let it glide.
+        if (ballDist > 100) { // Increased threshold for ball ownership
+            ball.x = state.ball.x;
+            ball.y = state.ball.y;
+        } else if (ballDist > 2) {
+            // Soft correction: gently pull the ball towards the server position
+            ball.x += (state.ball.x - ball.x) * 0.2;
+            ball.y += (state.ball.y - ball.y) * 0.2;
+        }
+
+        // Always trust velocity from server state for ball if not owner
+        ball.dx = state.ball.dx;
+        ball.dy = state.ball.dy;
     }
-
-    // Always trust velocity from server state for ball to maintain direction
-    ball.dx = state.ball.dx;
-    ball.dy = state.ball.dy;
+    // If I AM the owner, I ignore the server's ball position to prevent "jitter fights"
 }
 
 function showGoal() {
@@ -482,13 +488,19 @@ function update() {
         const dist = Math.hypot(ball.x - p.x, ball.y - p.y);
         if (dist < ball.radius + p.radius) {
             const angle = Math.atan2(ball.y - p.y, ball.x - p.x);
-            const force = 22; // Increased from 12 for faster ball on 1200px field
+            const force = 22; // Strong hit force
+
+            // Update local state immediately
             ball.dx = Math.cos(angle) * force;
             ball.dy = Math.sin(angle) * force;
-            ball.x = p.x + Math.cos(angle) * (ball.radius + p.radius + 1);
-            ball.y = p.y + Math.sin(angle) * (ball.radius + p.radius + 1);
+
+            // ANTI-STUCK: Aggressively push ball out of player radius
+            const overlap = (ball.radius + p.radius) - dist;
+            ball.x += Math.cos(angle) * (overlap + 10); // Offset by 10px buffer
+            ball.y += Math.sin(angle) * (overlap + 10);
 
             if (gameMode === 'online' && ((role === 'p1' && p === p1) || (role === 'p2' && p === p2))) {
+                ball.owner = role; // Assert authority
                 socket.emit('ballUpdate', { x: ball.x, y: ball.y, dx: ball.dx, dy: ball.dy });
             }
         }
@@ -565,6 +577,7 @@ function triggerGameOver(winner) {
 function resetMatchLocal() {
     ball.x = WIDTH / 2;
     ball.y = HEIGHT / 2;
+    ball.owner = null; // Authority reset
 
     if (gameMode === 'computer') {
         // Auto-push ball to start the action
