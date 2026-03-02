@@ -337,36 +337,22 @@ function syncState(state) {
         p1Target.y = state.p1.y;
     }
 
-    // Ball authority logic (v17.2 Sticky Ownership)
-    const now = Date.now();
-    const canStealOwnership = (now - lastOwnershipTransferTime > 500); // 500ms sticky window
+    // Ball authority logic (v18: Server Authoritative)
+    const ballDist = Math.hypot(ball.x - state.ball.x, ball.y - state.ball.y);
 
-    if (state.ball.owner !== ball.owner) {
-        if (canStealOwnership || !ball.owner) {
-            ball.owner = state.ball.owner;
-            if (ball.owner !== role) lastOwnershipTransferTime = now;
-        }
+    // Stricter lerping to server truth
+    if (ballDist > 150) {
+        ball.x = state.ball.x;
+        ball.y = state.ball.y;
+    } else if (ballDist > 1) {
+        // Faster lerp to server position (0.4 instead of 0.25)
+        ball.x += (state.ball.x - ball.x) * 0.4;
+        ball.y += (state.ball.y - ball.y) * 0.4;
     }
 
-    // If I am NOT the owner, I follow the server's ball state as truth
-    if (ball.owner !== role) {
-        const ballDist = Math.hypot(ball.x - state.ball.x, ball.y - state.ball.y);
-
-        // If the ball is very far away, snap it. Otherwise, let it glide.
-        if (ballDist > 120) {
-            ball.x = state.ball.x;
-            ball.y = state.ball.y;
-        } else if (ballDist > 2) {
-            // Soft correction: gently pull the ball towards the server position
-            ball.x += (state.ball.x - ball.x) * 0.25;
-            ball.y += (state.ball.y - ball.y) * 0.25;
-        }
-
-        // Always trust velocity from server state if not owner
-        ball.dx = state.ball.dx;
-        ball.dy = state.ball.dy;
-    }
-    // If I AM the owner, I ignore the server's ball position to prevent "jitter fights"
+    // Always trust velocity from server state for ball
+    ball.dx = state.ball.dx;
+    ball.dy = state.ball.dy;
 }
 
 function showGoal() {
@@ -512,15 +498,12 @@ function update() {
 
             if (gameMode === 'online' && ((role === 'p1' && p === p1) || (role === 'p2' && p === p2))) {
                 const now = Date.now();
-                // Sticky Ownership Window: Once I hit it, I own it for at least 500ms
-                ball.owner = role;
-                lastOwnershipTransferTime = now;
+                // V18: Report hit to server as a velocity hint
+                // We don't wait for server to update position, we update locally for feel
+                // but server will correct us in the next syncState tick.
 
-                // Throttle ball updates to ~22Hz to avoid flooding during simultaneous hits
                 if (now - lastBallEmitTime > 40) {
                     socket.emit('ballUpdate', {
-                        x: Math.round(ball.x),
-                        y: Math.round(ball.y),
                         dx: parseFloat(ball.dx.toFixed(2)),
                         dy: parseFloat(ball.dy.toFixed(2))
                     });
@@ -555,9 +538,7 @@ function update() {
         const isGoalArea = ball.y > GOAL_Y && ball.y < GOAL_Y + GOAL_HEIGHT;
         if (isGoalArea) {
             if (ball.x < -ball.radius) {
-                if (gameMode === 'online') {
-                    socket.emit('goal', { score1: p1.score, score2: p2.score + 1 });
-                } else {
+                if (gameMode !== 'online') {
                     p2.score++;
                     score2El.innerText = p2.score;
                     showGoal();
@@ -575,9 +556,7 @@ function update() {
         const isGoalArea = ball.y > GOAL_Y && ball.y < GOAL_Y + GOAL_HEIGHT;
         if (isGoalArea) {
             if (ball.x > WIDTH + ball.radius) {
-                if (gameMode === 'online') {
-                    socket.emit('goal', { score1: p1.score + 1, score2: p2.score });
-                } else {
+                if (gameMode !== 'online') {
                     p1.score++;
                     score1El.innerText = p1.score;
                     showGoal();

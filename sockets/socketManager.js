@@ -7,6 +7,17 @@ const INITIAL_STATE = {
     status: 'waiting' // waiting, playing, finished
 };
 
+// Constants shared with client
+const WIDTH = 1200;
+const HEIGHT = 800;
+const FRICTION = 0.99;
+const BALL_RADIUS = 18;
+const PLAYER_RADIUS = 35;
+const GOAL_WIDTH = 30;
+const GOAL_HEIGHT = 240;
+const GOAL_Y = (HEIGHT - GOAL_HEIGHT) / 2;
+const FIELD_MARGIN = 12;
+
 const socketManager = (io) => {
     io.on('connection', (socket) => {
         console.log(`📡 Socket connected: ${socket.id}`);
@@ -72,19 +83,19 @@ const socketManager = (io) => {
                 room.state.status = 'playing';
                 io.to(roomId).emit('gameStart', room.state);
 
-                // Start Server-side Tick (v17 optimization)
-                // ~22Hz (45ms) is a good balance for Render's free tier
+                // Start Server-side Tick (v18: Authoritative Physics)
                 if (room.tickInterval) clearInterval(room.tickInterval);
                 room.tickInterval = setInterval(() => {
                     if (room.state.status === 'playing') {
-                        // V17.2: Optimized Payload (only send dynamic movement data)
+                        updatePhysics(room);
+
+                        // Optimized Payload
                         const compactState = {
                             ball: {
                                 x: Math.round(room.state.ball.x),
                                 y: Math.round(room.state.ball.y),
                                 dx: parseFloat(room.state.ball.dx.toFixed(2)),
-                                dy: parseFloat(room.state.ball.dy.toFixed(2)),
-                                owner: room.state.ball.owner
+                                dy: parseFloat(room.state.ball.dy.toFixed(2))
                             },
                             p1: { x: Math.round(room.state.p1.x), y: Math.round(room.state.p1.y) },
                             p2: { x: Math.round(room.state.p2.x), y: Math.round(room.state.p2.y) }
@@ -93,7 +104,86 @@ const socketManager = (io) => {
                     } else {
                         clearInterval(room.tickInterval);
                     }
-                }, 45);
+                }, 45); // 22Hz
+            }
+        }
+
+        function updatePhysics(room) {
+            const ball = room.state.ball;
+            const p1 = room.state.p1;
+            const p2 = room.state.p2;
+
+            // 1. Move Ball
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+            ball.dx *= FRICTION;
+            ball.dy *= FRICTION;
+
+            // 2. Wall Collisions
+            if (ball.y < BALL_RADIUS + FIELD_MARGIN || ball.y > HEIGHT - BALL_RADIUS - FIELD_MARGIN) {
+                ball.dy *= -1;
+                ball.y = ball.y < BALL_RADIUS + FIELD_MARGIN ? BALL_RADIUS + FIELD_MARGIN : HEIGHT - BALL_RADIUS - FIELD_MARGIN;
+            }
+
+            // 3. Goal & End Wall Collisions
+            if (ball.x < BALL_RADIUS + FIELD_MARGIN) {
+                const isGoalArea = ball.y > GOAL_Y && ball.y < GOAL_Y + GOAL_HEIGHT;
+                if (isGoalArea) {
+                    if (ball.x < -BALL_RADIUS) {
+                        handleGoal(room, 'p2');
+                    }
+                } else {
+                    ball.dx *= -1;
+                    ball.x = BALL_RADIUS + FIELD_MARGIN;
+                }
+            }
+
+            if (ball.x > WIDTH - BALL_RADIUS - FIELD_MARGIN) {
+                const isGoalArea = ball.y > GOAL_Y && ball.y < GOAL_Y + GOAL_HEIGHT;
+                if (isGoalArea) {
+                    if (ball.x > WIDTH + BALL_RADIUS) {
+                        handleGoal(room, 'p1');
+                    }
+                } else {
+                    ball.dx *= -1;
+                    ball.x = WIDTH - BALL_RADIUS - FIELD_MARGIN;
+                }
+            }
+
+            // 4. Player Collisions (Server-side validation)
+            [p1, p2].forEach(p => {
+                const dist = Math.hypot(ball.x - p.x, ball.y - p.y);
+                if (dist < BALL_RADIUS + PLAYER_RADIUS) {
+                    const angle = Math.atan2(ball.y - p.y, ball.x - p.x);
+                    const force = 22;
+                    ball.dx = Math.cos(angle) * force;
+                    ball.dy = Math.sin(angle) * force;
+                    // Pop transition
+                    const overlap = (BALL_RADIUS + PLAYER_RADIUS) - dist;
+                    ball.x += Math.cos(angle) * (overlap + 5);
+                    ball.y += Math.sin(angle) * (overlap + 5);
+                }
+            });
+        }
+
+        function handleGoal(room, winnerRole) {
+            if (winnerRole === 'p1') room.state.p1.score++;
+            else room.state.p2.score++;
+
+            room.state.ball = { x: 600, y: 400, dx: 0, dy: 0 };
+            room.state.p1.x = 240; room.state.p1.y = 400;
+            room.state.p2.x = 960; room.state.p2.y = 400;
+
+            io.to(room.id || currentRoomId).emit('scoreSync', {
+                score1: room.state.p1.score,
+                score2: room.state.p2.score
+            });
+
+            if (room.state.p1.score >= room.winLimit || room.state.p2.score >= room.winLimit) {
+                const winner = room.state.p1.score >= room.winLimit ? 'Player 1' : 'Player 2';
+                io.to(room.id || currentRoomId).emit('gameOver', { winner });
+                room.state.status = 'finished';
+                if (room.tickInterval) clearInterval(room.tickInterval);
             }
         }
 
@@ -104,40 +194,15 @@ const socketManager = (io) => {
 
             room.state[role].x = data.x;
             room.state[role].y = data.y;
-            // No longer broadcasting here; let the tick handle it
         });
 
+        // V18: ballUpdate is now used as a hint for hits, but server dominates
         socket.on('ballUpdate', (data) => {
             if (!currentRoomId || !rooms[currentRoomId]) return;
             const room = rooms[currentRoomId];
-            const role = room.players[0] === socket.id ? 'p1' : 'p2';
-            room.state.ball = data;
-            room.state.ball.owner = role; // Set owner to current hitter
-            // No longer broadcasting here; let the tick handle it
-        });
-
-        socket.on('goal', (data) => {
-            if (!currentRoomId || !rooms[currentRoomId]) return;
-            const room = rooms[currentRoomId];
-            room.state.p1.score = data.score1;
-            room.state.p2.score = data.score2;
-            room.state.ball = { x: 600, y: 400, dx: 0, dy: 0, owner: null }; // Reset owner on goal
-            room.state.p1.x = 240; room.state.p1.y = 400;
-            room.state.p2.x = 960; room.state.p2.y = 400;
-
-            // Score sync is critical, don't use volatile
-            io.to(currentRoomId).emit('scoreSync', { score1: room.state.p1.score, score2: room.state.p2.score });
-            io.to(currentRoomId).emit('stateUpdate', room.state);
-
-            if (room.state.p1.score >= room.winLimit || room.state.p2.score >= room.winLimit) {
-                const winner = room.state.p1.score >= room.winLimit ? 'Player 1' : 'Player 2';
-                io.to(currentRoomId).emit('gameOver', { winner });
-                room.state.status = 'finished';
-                if (room.tickInterval) clearInterval(room.tickInterval);
-                setTimeout(() => {
-                    if (rooms[currentRoomId]) delete rooms[currentRoomId];
-                }, 5000);
-            }
+            // Accept velocity hints to keep immediate feedback, but server will correct
+            room.state.ball.dx = data.dx;
+            room.state.ball.dy = data.dy;
         });
 
         socket.on('disconnect', () => {
