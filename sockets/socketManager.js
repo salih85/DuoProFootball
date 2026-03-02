@@ -71,6 +71,18 @@ const socketManager = (io) => {
             if (room.players.length === 2) {
                 room.state.status = 'playing';
                 io.to(roomId).emit('gameStart', room.state);
+
+                // Start Server-side Tick (v17 optimization)
+                // ~22Hz (45ms) is a good balance for Render's free tier
+                if (room.tickInterval) clearInterval(room.tickInterval);
+                room.tickInterval = setInterval(() => {
+                    if (room.state.status === 'playing') {
+                        // Use volatile to skip if client is lagging/buffering
+                        io.to(roomId).volatile.emit('stateUpdate', room.state);
+                    } else {
+                        clearInterval(room.tickInterval);
+                    }
+                }, 45);
             }
         }
 
@@ -81,14 +93,13 @@ const socketManager = (io) => {
 
             room.state[role].x = data.x;
             room.state[role].y = data.y;
-
-            socket.to(currentRoomId).emit('stateUpdate', room.state);
+            // No longer broadcasting here; let the tick handle it
         });
 
         socket.on('ballUpdate', (data) => {
             if (!currentRoomId || !rooms[currentRoomId]) return;
             rooms[currentRoomId].state.ball = data;
-            socket.to(currentRoomId).emit('stateUpdate', rooms[currentRoomId].state);
+            // No longer broadcasting here; let the tick handle it
         });
 
         socket.on('goal', (data) => {
@@ -100,6 +111,7 @@ const socketManager = (io) => {
             room.state.p1.x = 240; room.state.p1.y = 400;
             room.state.p2.x = 960; room.state.p2.y = 400;
 
+            // Score sync is critical, don't use volatile
             io.to(currentRoomId).emit('scoreSync', { score1: room.state.p1.score, score2: room.state.p2.score });
             io.to(currentRoomId).emit('stateUpdate', room.state);
 
@@ -107,6 +119,7 @@ const socketManager = (io) => {
                 const winner = room.state.p1.score >= room.winLimit ? 'Player 1' : 'Player 2';
                 io.to(currentRoomId).emit('gameOver', { winner });
                 room.state.status = 'finished';
+                if (room.tickInterval) clearInterval(room.tickInterval);
                 setTimeout(() => {
                     if (rooms[currentRoomId]) delete rooms[currentRoomId];
                 }, 5000);
@@ -115,7 +128,9 @@ const socketManager = (io) => {
 
         socket.on('disconnect', () => {
             if (currentRoomId && rooms[currentRoomId]) {
+                const room = rooms[currentRoomId];
                 socket.to(currentRoomId).emit('opponentDisconnected');
+                if (room.tickInterval) clearInterval(room.tickInterval);
                 delete rooms[currentRoomId];
             }
         });

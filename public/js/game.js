@@ -335,13 +335,20 @@ function syncState(state) {
         p1Target.y = state.p1.y;
     }
 
-    // Snap ball if it diverges too much, let local physics handle minor discrepancies
+    // Ball sync: Handle drift without aggressive snapping
     const ballDist = Math.hypot(ball.x - state.ball.x, ball.y - state.ball.y);
-    if (ballDist > 15) {
+
+    // If the ball is very far away, snap it. Otherwise, let it glide.
+    if (ballDist > 60) {
         ball.x = state.ball.x;
         ball.y = state.ball.y;
+    } else if (ballDist > 2) {
+        // Soft correction: gently pull the ball towards the server position
+        ball.x += (state.ball.x - ball.x) * 0.15;
+        ball.y += (state.ball.y - ball.y) * 0.15;
     }
-    // Always trust velocity from server state for ball
+
+    // Always trust velocity from server state for ball to maintain direction
     ball.dx = state.ball.dx;
     ball.dy = state.ball.dy;
 }
@@ -449,15 +456,15 @@ function update() {
         let opponent = role === 'p1' ? p2 : p1;
         let target = role === 'p1' ? p2Target : p1Target;
 
-        // Glide towards target
-        opponent.x += (target.x - opponent.x) * 0.3;
-        opponent.y += (target.y - opponent.y) * 0.3;
+        // Glide towards target - slightly faster lerp (0.4) to match 22Hz server tick
+        opponent.x += (target.x - opponent.x) * 0.4;
+        opponent.y += (target.y - opponent.y) * 0.4;
     }
 
     if (gameMode === 'online' && (me.x !== oldX || me.y !== oldY)) {
         const now = Date.now();
-        // Throttle emissions to ~30Hz (every 33ms) instead of 60Hz to save bandwidth and reduce lag
-        if (now - lastEmitTime > 33) {
+        // Match client emission to server tick (approx 45ms)
+        if (now - lastEmitTime > 45) {
             socket.emit('playerUpdate', { x: me.x, y: me.y });
             lastEmitTime = now;
         }
