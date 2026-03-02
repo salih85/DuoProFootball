@@ -52,8 +52,10 @@ let ball = { x: WIDTH / 2, y: HEIGHT / 2, radius: 18, dx: 0, dy: 0, owner: null 
 let p1 = { x: 240, y: 400, radius: 35, color: '#3b82f6', score: 0 };
 let p2 = { x: 960, y: 400, radius: 35, color: '#ef4444', score: 0 };
 
-// Network Sync State (Lerping)
+// Network Sync State (v17.2)
 let lastEmitTime = 0;
+let lastBallEmitTime = 0;
+let lastOwnershipTransferTime = 0; // Sticky ownership cooldown
 let p1Target = { x: 240, y: 400 };
 let p2Target = { x: 960, y: 400 };
 let ballTarget = { x: WIDTH / 2, y: HEIGHT / 2 };
@@ -335,24 +337,32 @@ function syncState(state) {
         p1Target.y = state.p1.y;
     }
 
-    // Ball authority logic (v17.1)
-    ball.owner = state.ball.owner;
+    // Ball authority logic (v17.2 Sticky Ownership)
+    const now = Date.now();
+    const canStealOwnership = (now - lastOwnershipTransferTime > 500); // 500ms sticky window
+
+    if (state.ball.owner !== ball.owner) {
+        if (canStealOwnership || !ball.owner) {
+            ball.owner = state.ball.owner;
+            if (ball.owner !== role) lastOwnershipTransferTime = now;
+        }
+    }
 
     // If I am NOT the owner, I follow the server's ball state as truth
     if (ball.owner !== role) {
         const ballDist = Math.hypot(ball.x - state.ball.x, ball.y - state.ball.y);
 
         // If the ball is very far away, snap it. Otherwise, let it glide.
-        if (ballDist > 100) { // Increased threshold for ball ownership
+        if (ballDist > 120) {
             ball.x = state.ball.x;
             ball.y = state.ball.y;
         } else if (ballDist > 2) {
             // Soft correction: gently pull the ball towards the server position
-            ball.x += (state.ball.x - ball.x) * 0.2;
-            ball.y += (state.ball.y - ball.y) * 0.2;
+            ball.x += (state.ball.x - ball.x) * 0.25;
+            ball.y += (state.ball.y - ball.y) * 0.25;
         }
 
-        // Always trust velocity from server state for ball if not owner
+        // Always trust velocity from server state if not owner
         ball.dx = state.ball.dx;
         ball.dy = state.ball.dy;
     }
@@ -469,9 +479,10 @@ function update() {
 
     if (gameMode === 'online' && (me.x !== oldX || me.y !== oldY)) {
         const now = Date.now();
-        // Match client emission to server tick (approx 45ms)
+        // Match client emission to server tick (45ms/22Hz)
         if (now - lastEmitTime > 45) {
-            socket.emit('playerUpdate', { x: me.x, y: me.y });
+            // V17.2: Round coordinates to reduce packet size
+            socket.emit('playerUpdate', { x: Math.round(me.x), y: Math.round(me.y) });
             lastEmitTime = now;
         }
     }
@@ -500,8 +511,21 @@ function update() {
             ball.y += Math.sin(angle) * (overlap + 10);
 
             if (gameMode === 'online' && ((role === 'p1' && p === p1) || (role === 'p2' && p === p2))) {
-                ball.owner = role; // Assert authority
-                socket.emit('ballUpdate', { x: ball.x, y: ball.y, dx: ball.dx, dy: ball.dy });
+                const now = Date.now();
+                // Sticky Ownership Window: Once I hit it, I own it for at least 500ms
+                ball.owner = role;
+                lastOwnershipTransferTime = now;
+
+                // Throttle ball updates to ~22Hz to avoid flooding during simultaneous hits
+                if (now - lastBallEmitTime > 40) {
+                    socket.emit('ballUpdate', {
+                        x: Math.round(ball.x),
+                        y: Math.round(ball.y),
+                        dx: parseFloat(ball.dx.toFixed(2)),
+                        dy: parseFloat(ball.dy.toFixed(2))
+                    });
+                    lastBallEmitTime = now;
+                }
             }
         }
     });

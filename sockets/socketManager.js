@@ -77,8 +77,19 @@ const socketManager = (io) => {
                 if (room.tickInterval) clearInterval(room.tickInterval);
                 room.tickInterval = setInterval(() => {
                     if (room.state.status === 'playing') {
-                        // Use volatile to skip if client is lagging/buffering
-                        io.to(roomId).volatile.emit('stateUpdate', room.state);
+                        // V17.2: Optimized Payload (only send dynamic movement data)
+                        const compactState = {
+                            ball: {
+                                x: Math.round(room.state.ball.x),
+                                y: Math.round(room.state.ball.y),
+                                dx: parseFloat(room.state.ball.dx.toFixed(2)),
+                                dy: parseFloat(room.state.ball.dy.toFixed(2)),
+                                owner: room.state.ball.owner
+                            },
+                            p1: { x: Math.round(room.state.p1.x), y: Math.round(room.state.p1.y) },
+                            p2: { x: Math.round(room.state.p2.x), y: Math.round(room.state.p2.y) }
+                        };
+                        io.to(roomId).volatile.emit('stateUpdate', compactState);
                     } else {
                         clearInterval(room.tickInterval);
                     }
