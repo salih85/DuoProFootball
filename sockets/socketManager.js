@@ -98,7 +98,8 @@ const socketManager = (io) => {
                                 dy: parseFloat(room.state.ball.dy.toFixed(2))
                             },
                             p1: { x: Math.round(room.state.p1.x), y: Math.round(room.state.p1.y) },
-                            p2: { x: Math.round(room.state.p2.x), y: Math.round(room.state.p2.y) }
+                            p2: { x: Math.round(room.state.p2.x), y: Math.round(room.state.p2.y) },
+                            ts: Date.now()
                         };
                         io.to(roomId).volatile.emit('stateUpdate', compactState);
                     } else {

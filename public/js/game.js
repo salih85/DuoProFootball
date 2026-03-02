@@ -49,6 +49,7 @@ let keys = {};
 let targetTouchPos = null;
 
 let ball = { x: WIDTH / 2, y: HEIGHT / 2, radius: 18, dx: 0, dy: 0, owner: null };
+let visualBall = { x: WIDTH / 2, y: HEIGHT / 2 }; // V19: Smooth rendering ball
 let p1 = { x: 240, y: 400, radius: 35, color: '#3b82f6', score: 0 };
 let p2 = { x: 960, y: 400, radius: 35, color: '#ef4444', score: 0 };
 
@@ -243,11 +244,14 @@ function setupTouch() {
         // Map touch back to internal coordinates (1200x800)
         if (isVertical) {
             // ViewX is internal Y (0-HEIGHT), ViewY is internal X (0-WIDTH)
-            const internalY = (touchX / rect.width) * HEIGHT;
-            let internalX;
+            let internalX, internalY;
+
             if (role === 'p1') {
+                internalY = (touchX / rect.width) * HEIGHT;
                 internalX = (1 - (touchY / rect.height)) * WIDTH;
             } else {
+                // Corrected P2 Mapping: Visual X=0 is Internal Y=800
+                internalY = (1 - (touchX / rect.width)) * HEIGHT;
                 internalX = (touchY / rect.height) * WIDTH;
             }
             targetTouchPos = { x: internalX, y: internalY };
@@ -337,20 +341,26 @@ function syncState(state) {
         p1Target.y = state.p1.y;
     }
 
-    // Ball authority logic (v18: Server Authoritative)
-    const ballDist = Math.hypot(ball.x - state.ball.x, ball.y - state.ball.y);
+    // Ball authority logic (v19: Dead Reckoning)
+    const latency = (Date.now() - state.ts) / 1000; // time since server broadcast
 
-    // Stricter lerping to server truth
+    // Predict where the ball should be based on velocity and latency
+    const predictedX = state.ball.x + state.ball.dx * (latency * 60); // approx 60fps
+    const predictedY = state.ball.y + state.ball.dy * (latency * 60);
+
+    const ballDist = Math.hypot(ball.x - predictedX, ball.y - predictedY);
+
+    // If the ball is very far away, snap the physics ball.
     if (ballDist > 150) {
-        ball.x = state.ball.x;
-        ball.y = state.ball.y;
+        ball.x = predictedX;
+        ball.y = predictedY;
     } else if (ballDist > 1) {
-        // Faster lerp to server position (0.4 instead of 0.25)
-        ball.x += (state.ball.x - ball.x) * 0.4;
-        ball.y += (state.ball.y - ball.y) * 0.4;
+        // Soft correction: merge physics ball with predicted server position
+        ball.x += (predictedX - ball.x) * 0.45;
+        ball.y += (predictedY - ball.y) * 0.45;
     }
 
-    // Always trust velocity from server state for ball
+    // Always trust velocity from server state
     ball.dx = state.ball.dx;
     ball.dy = state.ball.dy;
 }
@@ -682,7 +692,11 @@ function drawPlayer(p) {
 
 function drawBall() {
     ctx.save();
-    ctx.translate(ball.x, ball.y);
+    // V19: Pure Visual Lerping to hide jitter
+    visualBall.x += (ball.x - visualBall.x) * 0.5;
+    visualBall.y += (ball.y - visualBall.y) * 0.5;
+
+    ctx.translate(visualBall.x, visualBall.y);
     ctx.beginPath();
     ctx.arc(0, 0, ball.radius, 0, Math.PI * 2);
     ctx.fillStyle = "white";
