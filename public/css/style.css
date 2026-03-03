@@ -411,10 +411,12 @@ body {
 }
 
 .score-card.p1-score {
-  /* Dynamic shadow based on color? No, keep simple: */
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
 }
 
-.score-card.p2-score {}
+.score-card.p2-score {
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+}
 
 .score-card .label {
   font-size: 0.65rem;
@@ -504,7 +506,7 @@ canvas {
 }
 
 .glass-card {
-  /* Inherits from new modal-content or specialized cards */
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
 /* Buttons */
@@ -558,5 +560,40 @@ canvas {
   .canvas-wrapper {
     height: 75vh;
     width: calc(75vh * 1.5);
+  }
+}
+
+/* --- Virtual Joystick (v21) --- */
+.joystick-base {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.joystick-stick {
+  width: 50px;
+  height: 50px;
+  background: white;
+  background: radial-gradient(circle at 30% 30%, #ffffff, #cbd5e1);
+  border-radius: 50%;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+  transition: transform 0.05s ease-out;
+}
+
+/* Hide joystick on desktop unless touch is used */
+@media (pointer: fine) {
+  .joystick-base {
+    display: none !important;
   }
 }

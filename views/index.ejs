@@ -28,7 +28,7 @@
             <p class="game-subtitle">Elite Multi-Player Experience</p>
 
             <div class="mode-selection">
-                 <button id="openOnlineModal" class="premium-btn online">
+                <button id="openOnlineModal" class="premium-btn online">
                     <span class="icon">🌍</span>
                     <span class="text">Online Match</span>
                 </button>
@@ -36,7 +36,7 @@
                     <span class="icon">🤖</span>
                     <span class="text">VS Computer</span>
                 </button>
-                
+
             </div>
 
             <div id="searching-text" class="hidden">
@@ -164,6 +164,11 @@
 
         <div class="canvas-wrapper">
             <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+            <!-- Virtual Joystick (v21) -->
+            <div id="joystick-base" class="joystick-base hidden">
+                <div id="joystick-stick" class="joystick-stick"></div>
+            </div>
         </div>
 
     </div>

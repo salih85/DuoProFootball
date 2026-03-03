@@ -48,6 +48,22 @@ let isPaused = false;
 let keys = {};
 let targetTouchPos = null;
 
+// Joystick State (v21)
+let joystick = {
+    active: false,
+    baseX: 0,
+    baseY: 0,
+    stickX: 0,
+    stickY: 0,
+    vectorX: 0,
+    vectorY: 0,
+    touchId: null
+};
+const joystickBaseEl = document.getElementById('joystick-base');
+const joystickStickEl = document.getElementById('joystick-stick');
+const JOYSTICK_RADIUS = 60;
+const JOYSTICK_DEADZONE = 5; // Pixels to ignore for better precision
+
 let ball = { x: WIDTH / 2, y: HEIGHT / 2, radius: 18, dx: 0, dy: 0, owner: null };
 let visualBall = { x: WIDTH / 2, y: HEIGHT / 2 }; // V19: Smooth rendering ball
 let p1 = { x: 240, y: 400, radius: 35, color: '#3b82f6', score: 0 };
@@ -223,43 +239,89 @@ function setupInput() {
 
 function setupTouch() {
     canvas.addEventListener('touchstart', (e) => {
-        handleTouch(e);
+        if (status !== 'playing' || isPaused) return;
+
+        // Use first touch for joystick if not already active
+        if (!joystick.active) {
+            const touch = e.changedTouches[0];
+            const rect = canvas.getBoundingClientRect();
+
+            joystick.active = true;
+            joystick.touchId = touch.identifier;
+            joystick.baseX = touch.clientX - rect.left;
+            joystick.baseY = touch.clientY - rect.top;
+
+            joystickBaseEl.style.left = `${joystick.baseX - JOYSTICK_RADIUS}px`;
+            joystickBaseEl.style.top = `${joystick.baseY - JOYSTICK_RADIUS}px`;
+            joystickBaseEl.classList.remove('hidden');
+
+            // Haptic Feedback (v21)
+            if (navigator.vibrate) navigator.vibrate(10);
+
+            updateJoystick(touch);
+        }
     }, { passive: false });
 
     window.addEventListener('touchmove', (e) => {
-        handleTouch(e);
+        if (!joystick.active) return;
+        e.preventDefault();
+
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === joystick.touchId) {
+                updateJoystick(e.changedTouches[i]);
+                break;
+            }
+        }
     }, { passive: false });
 
-    window.addEventListener('touchend', () => {
-        targetTouchPos = null;
+    window.addEventListener('touchend', (e) => {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === joystick.touchId) {
+                resetJoystick();
+                break;
+            }
+        }
     });
 
-    function handleTouch(e) {
-        e.preventDefault();
-        const touch = e.touches[0];
+    function updateJoystick(touch) {
         const rect = canvas.getBoundingClientRect();
         const touchX = touch.clientX - rect.left;
         const touchY = touch.clientY - rect.top;
 
-        // Map touch back to internal coordinates (1200x800)
-        if (isVertical) {
-            // ViewX is internal Y (0-HEIGHT), ViewY is internal X (0-WIDTH)
-            let internalX, internalY;
+        const dx = touchX - joystick.baseX;
+        const dy = touchY - joystick.baseY;
+        const dist = Math.hypot(dx, dy);
 
-            if (role === 'p1') {
-                internalY = (touchX / rect.width) * HEIGHT;
-                internalX = (1 - (touchY / rect.height)) * WIDTH;
-            } else {
-                // Corrected P2 Mapping: Visual X=0 is Internal Y=800
-                internalY = (1 - (touchX / rect.width)) * HEIGHT;
-                internalX = (touchY / rect.height) * WIDTH;
-            }
-            targetTouchPos = { x: internalX, y: internalY };
+        if (dist < JOYSTICK_DEADZONE) {
+            joystick.stickX = 0;
+            joystick.stickY = 0;
+            joystick.vectorX = 0;
+            joystick.vectorY = 0;
         } else {
-            const internalX = (touchX / rect.width) * WIDTH;
-            const internalY = (touchY / rect.height) * HEIGHT;
-            targetTouchPos = { x: internalX, y: internalY };
+            const maxDist = JOYSTICK_RADIUS;
+            const speed = Math.min(dist, maxDist);
+            const angle = Math.atan2(dy, dx);
+
+            joystick.stickX = Math.cos(angle) * speed;
+            joystick.stickY = Math.sin(angle) * speed;
+
+            // Normalize vector (-1 to 1)
+            // We subtract deadzone from distance for a smoother ramp-up
+            const normalizedMag = (speed - JOYSTICK_DEADZONE) / (maxDist - JOYSTICK_DEADZONE);
+            joystick.vectorX = Math.cos(angle) * normalizedMag;
+            joystick.vectorY = Math.sin(angle) * normalizedMag;
         }
+
+        joystickStickEl.style.transform = `translate(${joystick.stickX}px, ${joystick.stickY}px)`;
+    }
+
+    function resetJoystick() {
+        joystick.active = false;
+        joystick.touchId = null;
+        joystick.vectorX = 0;
+        joystick.vectorY = 0;
+        joystickBaseEl.classList.add('hidden');
+        joystickStickEl.style.transform = `translate(0, 0)`;
     }
 }
 
@@ -415,18 +477,26 @@ function update() {
     if (keys['KeyA'] || keys['ArrowLeft']) me.x -= PLAYER_SPEED;
     if (keys['KeyD'] || keys['ArrowRight']) me.x += PLAYER_SPEED;
 
-    // direct touch
-    if (targetTouchPos) {
-        const dx = targetTouchPos.x - me.x;
-        const dy = targetTouchPos.y - me.y;
-        const dist = Math.hypot(dx, dy);
+    // virtual joystick (v21)
+    if (joystick.active) {
+        let vx = joystick.vectorX;
+        let vy = joystick.vectorY;
 
-        // Smooth easing towards touch instead of rigid steps
-        if (dist > 2) {
-            // Decelerate as we get closer to avoid jitter
-            const speed = Math.min(PLAYER_SPEED, dist * 0.3);
-            me.x += (dx / dist) * speed;
-            me.y += (dy / dist) * speed;
+        // Map joystick vectors to internal coordinates based on orientation/role
+        if (isVertical) {
+            if (role === 'p1') {
+                // Portrait P1: Joystick Up is Internal Left (-X), Side is Internal Y
+                me.x -= vy * PLAYER_SPEED;
+                me.y += vx * PLAYER_SPEED;
+            } else {
+                // Portrait P2: Joystick Up is Internal Right (+X), Side is Internal Y
+                me.x += vy * PLAYER_SPEED;
+                me.y -= vx * PLAYER_SPEED;
+            }
+        } else {
+            // Landscape: Standard mapping
+            me.x += vx * PLAYER_SPEED;
+            me.y += vy * PLAYER_SPEED;
         }
     }
 
