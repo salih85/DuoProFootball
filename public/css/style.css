@@ -380,20 +380,22 @@ body {
   display: none !important;
 }
 
-/* --- Header Sync (Stabilized v26) --- */
+/* --- Header Sync (Stabilized v27) --- */
 .ui-header {
-  position: absolute;
+  position: fixed;
+  /* Decouple from canvas container */
   top: 0;
   left: 0;
   width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 1.5rem 2rem;
+  padding: 1rem 1.5rem;
   z-index: 100;
   pointer-events: none;
-  /* Allow clicks to pass through header space to canvas if needed */
   box-sizing: border-box;
+  contain: layout;
+  /* V27 Optimization */
 }
 
 .score-card {

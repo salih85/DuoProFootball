@@ -47,6 +47,7 @@ let isVertical = false;
 let isPaused = false;
 let keys = {};
 let targetTouchPos = null;
+let cachedRect = null; // V27: Cache for mobile performance
 let ball = { x: WIDTH / 2, y: HEIGHT / 2, radius: 18, dx: 0, dy: 0, owner: null };
 let visualBall = { x: WIDTH / 2, y: HEIGHT / 2 }; // V19: Smooth rendering ball
 let p1 = { x: 240, y: 400, radius: 35, color: '#3b82f6', score: 0 };
@@ -237,24 +238,25 @@ function setupTouch() {
     });
 
     function handleDirectTouch(touch) {
-        const rect = canvas.getBoundingClientRect();
-        const touchX = touch.clientX - rect.left;
-        const touchY = touch.clientY - rect.top;
+        if (!cachedRect) cachedRect = canvas.getBoundingClientRect();
+
+        const touchX = touch.clientX - cachedRect.left;
+        const touchY = touch.clientY - cachedRect.top;
 
         // Map touch back to internal coordinates (1200x800)
         if (isVertical) {
             let internalX, internalY;
             if (role === 'p1') {
-                internalY = (touchX / rect.width) * HEIGHT;
-                internalX = (1 - (touchY / rect.height)) * WIDTH;
+                internalY = (touchX / cachedRect.width) * HEIGHT;
+                internalX = (1 - (touchY / cachedRect.height)) * WIDTH;
             } else {
-                internalY = (1 - (touchX / rect.width)) * HEIGHT;
-                internalX = (touchY / rect.height) * WIDTH;
+                internalY = (1 - (touchX / cachedRect.width)) * HEIGHT;
+                internalX = (touchY / cachedRect.height) * WIDTH;
             }
             targetTouchPos = { x: internalX, y: internalY };
         } else {
-            const internalX = (touchX / rect.width) * WIDTH;
-            const internalY = (touchY / rect.height) * HEIGHT;
+            const internalX = (touchX / cachedRect.width) * WIDTH;
+            const internalY = (touchY / cachedRect.height) * HEIGHT;
             targetTouchPos = { x: internalX, y: internalY };
         }
     }
@@ -263,9 +265,10 @@ function setupTouch() {
 function resizeCanvas() {
     isVertical = window.innerHeight > window.innerWidth;
     // Set internal resolution to match display size exactly.
-    // This removes all browser-level stretching distortion.
     canvas.width = canvas.clientWidth;
     canvas.height = canvas.clientHeight;
+    // V27: Update cache on resize
+    cachedRect = canvas.getBoundingClientRect();
 }
 
 // Socket Events
