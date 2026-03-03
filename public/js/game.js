@@ -59,7 +59,8 @@ let lastBallEmitTime = 0;
 let p1Buffer = [];
 let p2Buffer = [];
 let ballBuffer = [];
-const INTERPOLATION_DELAY = 120; // V26: Slightly increased to 120ms for better layout stability
+let lastResetTime = 0; // V29: Protection against "ghost" packets after goals
+const INTERPOLATION_DELAY = 120;
 
 // Global Settings (v16)
 let currentAiDifficulty = 'easy';
@@ -317,14 +318,19 @@ socket.on('scoreSync', (data) => {
     if (p1.score !== data.score1) {
         p1.score = data.score1;
         score1El.innerText = p1.score;
-        score1El.style.transform = "scale(1.2)";
-        setTimeout(() => score1El.style.transform = "scale(1)", 200);
+        // Skip expensive animations on small mobile screens (v29)
+        if (window.innerWidth > 600) {
+            score1El.style.transform = "scale(1.2)";
+            setTimeout(() => score1El.style.transform = "scale(1)", 200);
+        }
     }
     if (p2.score !== data.score2) {
         p2.score = data.score2;
         score2El.innerText = p2.score;
-        score2El.style.transform = "scale(1.2)";
-        setTimeout(() => score2El.style.transform = "scale(1)", 200);
+        if (window.innerWidth > 600) {
+            score2El.style.transform = "scale(1.2)";
+            setTimeout(() => score2El.style.transform = "scale(1)", 200);
+        }
     }
 
     resetMatchLocal(); // FORCE RESET POSITIONS LOCALLY
@@ -344,7 +350,10 @@ socket.on('opponentDisconnected', () => {
 });
 
 function syncState(state) {
-    const arrivalTime = Date.now(); // V28: Use arrival time for consistent interpolation
+    // V29: Ignore server updates for 250ms after a local reset to prevent "pull-back" ghosting
+    if (Date.now() - lastResetTime < 250) return;
+
+    const arrivalTime = Date.now();
 
     // Store states in buffers with arrival timestamp
     if (state.p1) p1Buffer.push({ x: state.p1.x, y: state.p1.y, ts: arrivalTime });
@@ -661,6 +670,7 @@ function resetMatchLocal() {
     visualBall.x = WIDTH / 2;
     visualBall.y = HEIGHT / 2;
     targetTouchPos = null;
+    lastResetTime = Date.now(); // V29: Mark reset time
 }
 
 function draw() {
@@ -746,8 +756,15 @@ function drawPlayer(p) {
 function drawBall() {
     ctx.save();
     // V19: Pure Visual Lerping to hide jitter
-    visualBall.x += (ball.x - visualBall.x) * 0.5;
-    visualBall.y += (ball.y - visualBall.y) * 0.5;
+    // V29: Instant teleport if distance is too large (prevents "disappearing" on goal)
+    const dist = Math.hypot(ball.x - visualBall.x, ball.y - visualBall.y);
+    if (dist > 150) {
+        visualBall.x = ball.x;
+        visualBall.y = ball.y;
+    } else {
+        visualBall.x += (ball.x - visualBall.x) * 0.4;
+        visualBall.y += (ball.y - visualBall.y) * 0.4;
+    }
 
     ctx.translate(visualBall.x, visualBall.y);
     ctx.beginPath();

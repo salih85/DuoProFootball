@@ -436,6 +436,7 @@ body {
   text-transform: uppercase;
 }
 
+/* --- Goal Announcement --- */
 .goal-announcement {
   font-size: 1.8rem;
   font-weight: 900;
@@ -444,6 +445,15 @@ body {
   transition: all 0.3s;
   text-shadow: 2px 2px 0px #000;
   white-space: nowrap;
+}
+
+/* V29: Extreme Lean Scorecards for Mobile */
+@media (max-width: 768px) {
+  .score-card {
+    transition: none !important;
+    box-shadow: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
 }
 
 .goal-announcement.show {
