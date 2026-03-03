@@ -173,6 +173,7 @@ const socketManager = (io) => {
                     const pVelY = p.dy || 0;
                     const pSpeed = Math.hypot(pVelX, pVelY);
 
+                    
                     // Base hit velocity from angle
                     let targetDx = Math.cos(angle) * hitPower;
                     let targetDy = Math.sin(angle) * hitPower;
