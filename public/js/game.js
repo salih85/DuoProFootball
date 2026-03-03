@@ -348,14 +348,14 @@ function syncState(state) {
 
     if (myState) {
         const dist = Math.hypot(me.x - myState.x, me.y - myState.y);
-        // If deviates too much from server (> 100px), snap to server
-        if (dist > 100) {
+        // If deviates too much from server (> 120px), snap to server
+        if (dist > 120) {
             me.x = myState.x;
             me.y = myState.y;
-        } else if (dist > 5) {
-            // Soft drift towards server state
-            me.x += (myState.x - me.x) * 0.1;
-            me.y += (myState.y - me.y) * 0.1;
+        } else if (dist > 15) {
+            // Soft drift towards server state - REDUCED to 0.04 for less "stickiness"
+            me.x += (myState.x - me.x) * 0.04;
+            me.y += (myState.y - me.y) * 0.04;
         }
     }
 }
@@ -412,15 +412,16 @@ function update() {
     if (keys['KeyA'] || keys['ArrowLeft']) me.x -= PLAYER_SPEED;
     if (keys['KeyD'] || keys['ArrowRight']) me.x += PLAYER_SPEED;
 
-    // smooth touch movement (v24)
+    // smooth touch movement (v25 - SNAPPY)
     if (targetTouchPos) {
         const dx = targetTouchPos.x - me.x;
         const dy = targetTouchPos.y - me.y;
         const dist = Math.hypot(dx, dy);
 
-        if (dist > 2) {
-            // Decelerate as we get closer to avoid jitter, but stay snappy
-            const speed = Math.min(PLAYER_SPEED, dist * 0.5);
+        if (dist > 1) {
+            // Higher tracking speed for touch to keep up with finger (1.8x regular speed)
+            const touchMaxSpeed = PLAYER_SPEED * 1.8;
+            const speed = Math.min(touchMaxSpeed, dist * 0.7);
             me.x += (dx / dist) * speed;
             me.y += (dy / dist) * speed;
         }
