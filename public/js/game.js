@@ -90,8 +90,13 @@ function updateScorecardColors() {
 
 function setupModals() {
     // Open Modals
-    openComputerModalBtn.addEventListener('click', () => computerModal.classList.remove('hidden'));
-    openOnlineModalBtn.addEventListener('click', () => onlineModal.classList.remove('hidden'));
+    if (openComputerModalBtn) {
+        openComputerModalBtn.addEventListener('click', () => computerModal.classList.remove('hidden'));
+    }
+    if (openOnlineModalBtn) {
+        openOnlineModalBtn.addEventListener('click', () => onlineModal.classList.remove('hidden'));
+    }
+
 
     // Close Modals
     document.querySelectorAll('.close-modal').forEach(btn => {
