@@ -83,13 +83,14 @@ const socketManager = (io) => {
                 room.state.status = 'playing';
                 io.to(roomId).emit('gameStart', room.state);
 
-                // Start Server-side Tick (v18: Authoritative Physics)
+                // Start Server-side Tick (v20: High-frequency Authoritative Physics)
                 if (room.tickInterval) clearInterval(room.tickInterval);
                 room.tickInterval = setInterval(() => {
                     if (room.state.status === 'playing') {
                         updatePhysics(room);
 
-                        // Optimized Payload
+                        // Optimized Payload - Send every tick or every other? 60fps might be high for some.
+                        // Let's stick to every tick for now but keep it extremely compact.
                         const compactState = {
                             ball: {
                                 x: Math.round(room.state.ball.x),
@@ -105,7 +106,7 @@ const socketManager = (io) => {
                     } else {
                         clearInterval(room.tickInterval);
                     }
-                }, 45); // 22Hz
+                }, 16); // ~60Hz
             }
         }
 
@@ -120,14 +121,18 @@ const socketManager = (io) => {
             ball.dx *= FRICTION;
             ball.dy *= FRICTION;
 
-            // 2. Wall Collisions
-            if (ball.y < BALL_RADIUS + FIELD_MARGIN || ball.y > HEIGHT - BALL_RADIUS - FIELD_MARGIN) {
+            // 2. Wall Collisions (Strict resolution)
+            const wallBuffer = BALL_RADIUS + FIELD_MARGIN;
+            if (ball.y < wallBuffer) {
                 ball.dy *= -1;
-                ball.y = ball.y < BALL_RADIUS + FIELD_MARGIN ? BALL_RADIUS + FIELD_MARGIN : HEIGHT - BALL_RADIUS - FIELD_MARGIN;
+                ball.y = wallBuffer;
+            } else if (ball.y > HEIGHT - wallBuffer) {
+                ball.dy *= -1;
+                ball.y = HEIGHT - wallBuffer;
             }
 
             // 3. Goal & End Wall Collisions
-            if (ball.x < BALL_RADIUS + FIELD_MARGIN) {
+            if (ball.x < wallBuffer) {
                 const isGoalArea = ball.y > GOAL_Y && ball.y < GOAL_Y + GOAL_HEIGHT;
                 if (isGoalArea) {
                     if (ball.x < -BALL_RADIUS) {
@@ -135,11 +140,11 @@ const socketManager = (io) => {
                     }
                 } else {
                     ball.dx *= -1;
-                    ball.x = BALL_RADIUS + FIELD_MARGIN;
+                    ball.x = wallBuffer;
                 }
             }
 
-            if (ball.x > WIDTH - BALL_RADIUS - FIELD_MARGIN) {
+            if (ball.x > WIDTH - wallBuffer) {
                 const isGoalArea = ball.y > GOAL_Y && ball.y < GOAL_Y + GOAL_HEIGHT;
                 if (isGoalArea) {
                     if (ball.x > WIDTH + BALL_RADIUS) {
@@ -147,20 +152,26 @@ const socketManager = (io) => {
                     }
                 } else {
                     ball.dx *= -1;
-                    ball.x = WIDTH - BALL_RADIUS - FIELD_MARGIN;
+                    ball.x = WIDTH - wallBuffer;
                 }
             }
 
             // 4. Player Collisions (Server-side validation)
+            const minPlayerDist = BALL_RADIUS + PLAYER_RADIUS;
             [p1, p2].forEach(p => {
-                const dist = Math.hypot(ball.x - p.x, ball.y - p.y);
-                if (dist < BALL_RADIUS + PLAYER_RADIUS) {
-                    const angle = Math.atan2(ball.y - p.y, ball.x - p.x);
+                const dx = ball.x - p.x;
+                const dy = ball.y - p.y;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist < minPlayerDist) {
+                    const angle = Math.atan2(dy, dx);
                     const force = 22;
                     ball.dx = Math.cos(angle) * force;
                     ball.dy = Math.sin(angle) * force;
-                    // Pop transition
-                    const overlap = (BALL_RADIUS + PLAYER_RADIUS) - dist;
+
+                    // ANTI-STUCK: Aggressive resolution
+                    // We push the ball outside the radius plus a small margin (5px)
+                    const overlap = minPlayerDist - dist;
                     ball.x += Math.cos(angle) * (overlap + 5);
                     ball.y += Math.sin(angle) * (overlap + 5);
                 }

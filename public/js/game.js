@@ -53,13 +53,13 @@ let visualBall = { x: WIDTH / 2, y: HEIGHT / 2 }; // V19: Smooth rendering ball
 let p1 = { x: 240, y: 400, radius: 35, color: '#3b82f6', score: 0 };
 let p2 = { x: 960, y: 400, radius: 35, color: '#ef4444', score: 0 };
 
-// Network Sync State (v17.2)
+// Network Sync State (v20: Interpolation & Buffering)
 let lastEmitTime = 0;
 let lastBallEmitTime = 0;
-let lastOwnershipTransferTime = 0; // Sticky ownership cooldown
-let p1Target = { x: 240, y: 400 };
-let p2Target = { x: 960, y: 400 };
-let ballTarget = { x: WIDTH / 2, y: HEIGHT / 2 };
+let p1Buffer = [];
+let p2Buffer = [];
+let ballBuffer = [];
+const INTERPOLATION_DELAY = 100; // 100ms buffer for smooth interpolation
 
 // Global Settings (v16)
 let currentAiDifficulty = 'easy';
@@ -333,36 +333,57 @@ socket.on('opponentDisconnected', () => {
 });
 
 function syncState(state) {
-    if (role === 'p1') {
-        p2Target.x = state.p2.x;
-        p2Target.y = state.p2.y;
-    } else {
-        p1Target.x = state.p1.x;
-        p1Target.y = state.p1.y;
+    const now = Date.now();
+
+    // Store states in buffers with server timestamp
+    if (state.p1) p1Buffer.push({ x: state.p1.x, y: state.p1.y, ts: state.ts });
+    if (state.p2) p2Buffer.push({ x: state.p2.x, y: state.p2.y, ts: state.ts });
+    if (state.ball) ballBuffer.push({ x: state.ball.x, y: state.ball.y, dx: state.ball.dx, dy: state.ball.dy, ts: state.ts });
+
+    // Keep buffers lean (last 10 states)
+    if (p1Buffer.length > 10) p1Buffer.shift();
+    if (p2Buffer.length > 10) p2Buffer.shift();
+    if (ballBuffer.length > 10) ballBuffer.shift();
+
+    // Reconciliation for the LOCAL player
+    let me = role === 'p1' ? p1 : p2;
+    let myState = role === 'p1' ? state.p1 : state.p2;
+
+    if (myState) {
+        const dist = Math.hypot(me.x - myState.x, me.y - myState.y);
+        // If deviates too much from server (> 100px), snap to server
+        if (dist > 100) {
+            me.x = myState.x;
+            me.y = myState.y;
+        } else if (dist > 5) {
+            // Soft drift towards server state
+            me.x += (myState.x - me.x) * 0.1;
+            me.y += (myState.y - me.y) * 0.1;
+        }
+    }
+}
+
+function interpolate(buffer, delay) {
+    const renderTime = Date.now() - delay;
+
+    // Find two states to interpolate between
+    for (let i = 0; i < buffer.length - 1; i++) {
+        const s0 = buffer[i];
+        const s1 = buffer[i + 1];
+
+        if (renderTime >= s0.ts && renderTime <= s1.ts) {
+            const t = (renderTime - s0.ts) / (s1.ts - s0.ts);
+            return {
+                x: s0.x + (s1.x - s0.x) * t,
+                y: s0.y + (s1.y - s0.y) * t,
+                dx: s0.dx + (s1.dx - s0.dx) * (s0.dx !== undefined ? t : 0), // handle velocity if present
+                dy: s0.dy + (s1.dy - s0.dy) * (s0.dy !== undefined ? t : 0)
+            };
+        }
     }
 
-    // Ball authority logic (v19: Dead Reckoning)
-    const latency = (Date.now() - state.ts) / 1000; // time since server broadcast
-
-    // Predict where the ball should be based on velocity and latency
-    const predictedX = state.ball.x + state.ball.dx * (latency * 60); // approx 60fps
-    const predictedY = state.ball.y + state.ball.dy * (latency * 60);
-
-    const ballDist = Math.hypot(ball.x - predictedX, ball.y - predictedY);
-
-    // If the ball is very far away, snap the physics ball.
-    if (ballDist > 150) {
-        ball.x = predictedX;
-        ball.y = predictedY;
-    } else if (ballDist > 1) {
-        // Soft correction: merge physics ball with predicted server position
-        ball.x += (predictedX - ball.x) * 0.45;
-        ball.y += (predictedY - ball.y) * 0.45;
-    }
-
-    // Always trust velocity from server state
-    ball.dx = state.ball.dx;
-    ball.dy = state.ball.dy;
+    // Fallback: Latest state
+    return buffer.length > 0 ? buffer[buffer.length - 1] : null;
 }
 
 function showGoal() {
@@ -463,21 +484,38 @@ function update() {
         p2.y = Math.max(p2.radius, Math.min(HEIGHT - p2.radius, p2.y));
     }
 
-    // Apply Lerping for network opponent
+    // Apply Interpolation/Lerping for network entities
     if (gameMode === 'online') {
         let opponent = role === 'p1' ? p2 : p1;
-        let target = role === 'p1' ? p2Target : p1Target;
+        let oppBuffer = role === 'p1' ? p2Buffer : p1Buffer;
 
-        // Glide towards target - slightly faster lerp (0.4) to match 22Hz server tick
-        opponent.x += (target.x - opponent.x) * 0.4;
-        opponent.y += (target.y - opponent.y) * 0.4;
+        const oppInterp = interpolate(oppBuffer, INTERPOLATION_DELAY);
+        if (oppInterp) {
+            opponent.x = oppInterp.x;
+            opponent.y = oppInterp.y;
+        }
+
+        // Interpolate Ball Physics state (optional, or just for visual)
+        const ballInterp = interpolate(ballBuffer, INTERPOLATION_DELAY);
+        if (ballInterp) {
+            // We still keep the local physics ball for "feeling", but reconcile
+            const dist = Math.hypot(ball.x - ballInterp.x, ball.y - ballInterp.y);
+            if (dist > 80) {
+                ball.x = ballInterp.x;
+                ball.y = ballInterp.y;
+            } else {
+                ball.x += (ballInterp.x - ball.x) * 0.2;
+                ball.y += (ballInterp.y - ball.y) * 0.2;
+            }
+            ball.dx = ballInterp.dx;
+            ball.dy = ballInterp.dy;
+        }
     }
 
     if (gameMode === 'online' && (me.x !== oldX || me.y !== oldY)) {
         const now = Date.now();
-        // Match client emission to server tick (45ms/22Hz)
-        if (now - lastEmitTime > 45) {
-            // V17.2: Round coordinates to reduce packet size
+        // Match client emission to server tick (16ms/60Hz)
+        if (now - lastEmitTime > 16) {
             socket.emit('playerUpdate', { x: Math.round(me.x), y: Math.round(me.y) });
             lastEmitTime = now;
         }
@@ -491,10 +529,14 @@ function update() {
     ball.dy *= FRICTION;
 
     // Collisions
+    const minPlayerDist = ball.radius + p1.radius;
     [p1, p2].forEach(p => {
-        const dist = Math.hypot(ball.x - p.x, ball.y - p.y);
-        if (dist < ball.radius + p.radius) {
-            const angle = Math.atan2(ball.y - p.y, ball.x - p.x);
+        const dx = ball.x - p.x;
+        const dy = ball.y - p.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist < minPlayerDist) {
+            const angle = Math.atan2(dy, dx);
             const force = 22; // Strong hit force
 
             // Update local state immediately
@@ -502,17 +544,14 @@ function update() {
             ball.dy = Math.sin(angle) * force;
 
             // ANTI-STUCK: Aggressively push ball out of player radius
-            const overlap = (ball.radius + p.radius) - dist;
+            const overlap = minPlayerDist - dist;
             ball.x += Math.cos(angle) * (overlap + 10); // Offset by 10px buffer
             ball.y += Math.sin(angle) * (overlap + 10);
 
             if (gameMode === 'online' && ((role === 'p1' && p === p1) || (role === 'p2' && p === p2))) {
                 const now = Date.now();
-                // V18: Report hit to server as a velocity hint
-                // We don't wait for server to update position, we update locally for feel
-                // but server will correct us in the next syncState tick.
-
-                if (now - lastBallEmitTime > 40) {
+                // Send velocity hint to server
+                if (now - lastBallEmitTime > 30) {
                     socket.emit('ballUpdate', {
                         dx: parseFloat(ball.dx.toFixed(2)),
                         dy: parseFloat(ball.dy.toFixed(2))
@@ -604,10 +643,12 @@ function resetMatchLocal() {
     p1.x = 240; p1.y = 400;
     p2.x = 960; p2.y = 400;
 
-    // Reset targets too so they don't lerp across the field
-    p1Target = { x: 240, y: 400 };
-    p2Target = { x: 960, y: 400 };
-    ballTarget = { x: WIDTH / 2, y: HEIGHT / 2 };
+    // Reset targets and buffers too so they don't lerp across the field
+    p1Buffer = [];
+    p2Buffer = [];
+    ballBuffer = [];
+    visualBall.x = WIDTH / 2;
+    visualBall.y = HEIGHT / 2;
 }
 
 function draw() {
