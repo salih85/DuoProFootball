@@ -82,6 +82,7 @@ let currentAiDifficulty = 'easy';
 let currentWinLimit = 5;
 let currentP1Color = '#3b82f6';
 let currentP2Color = '#ef4444';
+let currentTouchMode = 'joystick'; // 'joystick' or 'smooth'
 
 // Initialize
 function init() {
@@ -177,6 +178,7 @@ function setupInput() {
         p1.score = 0; p2.score = 0;
         score1El.innerText = "0"; score2El.innerText = "0";
         currentP2Color = '#ef4444'; // AI Default
+        currentTouchMode = document.getElementById('compTouchMode').value;
         updateScorecardColors();
 
         computerModal.classList.add('hidden');
@@ -216,10 +218,12 @@ function setupInput() {
         document.querySelector('.mode-selection').classList.add('hidden');
 
         if (onlineType === 'random') {
+            currentTouchMode = document.getElementById('onlineTouchMode').value;
             socket.emit('findMatch', { color: currentP1Color });
         } else {
             const code = joinRoomInput.value.trim().toUpperCase();
             if (code) {
+                currentTouchMode = document.getElementById('onlineTouchMode').value;
                 socket.emit('joinPrivateRoom', { roomId: code, color: currentP1Color });
             } else {
                 // If they created but didn't join... just wait for opponent? 
@@ -241,47 +245,85 @@ function setupTouch() {
     canvas.addEventListener('touchstart', (e) => {
         if (status !== 'playing' || isPaused) return;
 
-        // Use first touch for joystick if not already active
-        if (!joystick.active) {
-            const touch = e.changedTouches[0];
-            const rect = canvas.getBoundingClientRect();
+        const touch = e.changedTouches[0];
 
-            joystick.active = true;
-            joystick.touchId = touch.identifier;
-            joystick.baseX = touch.clientX - rect.left;
-            joystick.baseY = touch.clientY - rect.top;
+        if (currentTouchMode === 'joystick') {
+            // Use first touch for joystick if not already active
+            if (!joystick.active) {
+                const rect = canvas.getBoundingClientRect();
 
-            joystickBaseEl.style.left = `${joystick.baseX - JOYSTICK_RADIUS}px`;
-            joystickBaseEl.style.top = `${joystick.baseY - JOYSTICK_RADIUS}px`;
-            joystickBaseEl.classList.remove('hidden');
+                joystick.active = true;
+                joystick.touchId = touch.identifier;
+                joystick.baseX = touch.clientX - rect.left;
+                joystick.baseY = touch.clientY - rect.top;
 
-            // Haptic Feedback (v21)
-            if (navigator.vibrate) navigator.vibrate(10);
+                joystickBaseEl.style.left = `${joystick.baseX - JOYSTICK_RADIUS}px`;
+                joystickBaseEl.style.top = `${joystick.baseY - JOYSTICK_RADIUS}px`;
+                joystickBaseEl.classList.remove('hidden');
 
-            updateJoystick(touch);
+                // Haptic Feedback (v21)
+                if (navigator.vibrate) navigator.vibrate(10);
+
+                updateJoystick(touch);
+            }
+        } else {
+            // Smooth Drag Mode
+            handleDirectTouch(touch);
         }
     }, { passive: false });
 
     window.addEventListener('touchmove', (e) => {
-        if (!joystick.active) return;
+        if (status !== 'playing' || isPaused) return;
         e.preventDefault();
 
-        for (let i = 0; i < e.changedTouches.length; i++) {
-            if (e.changedTouches[i].identifier === joystick.touchId) {
-                updateJoystick(e.changedTouches[i]);
-                break;
+        if (currentTouchMode === 'joystick') {
+            if (!joystick.active) return;
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === joystick.touchId) {
+                    updateJoystick(e.changedTouches[i]);
+                    break;
+                }
             }
+        } else {
+            handleDirectTouch(e.changedTouches[0]);
         }
     }, { passive: false });
 
     window.addEventListener('touchend', (e) => {
-        for (let i = 0; i < e.changedTouches.length; i++) {
-            if (e.changedTouches[i].identifier === joystick.touchId) {
-                resetJoystick();
-                break;
+        if (currentTouchMode === 'joystick') {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === joystick.touchId) {
+                    resetJoystick();
+                    break;
+                }
             }
+        } else {
+            targetTouchPos = null;
         }
     });
+
+    function handleDirectTouch(touch) {
+        const rect = canvas.getBoundingClientRect();
+        const touchX = touch.clientX - rect.left;
+        const touchY = touch.clientY - rect.top;
+
+        // Map touch back to internal coordinates (1200x800)
+        if (isVertical) {
+            let internalX, internalY;
+            if (role === 'p1') {
+                internalY = (touchX / rect.width) * HEIGHT;
+                internalX = (1 - (touchY / rect.height)) * WIDTH;
+            } else {
+                internalY = (1 - (touchX / rect.width)) * HEIGHT;
+                internalX = (touchY / rect.height) * WIDTH;
+            }
+            targetTouchPos = { x: internalX, y: internalY };
+        } else {
+            const internalX = (touchX / rect.width) * WIDTH;
+            const internalY = (touchY / rect.height) * HEIGHT;
+            targetTouchPos = { x: internalX, y: internalY };
+        }
+    }
 
     function updateJoystick(touch) {
         const rect = canvas.getBoundingClientRect();
@@ -478,25 +520,36 @@ function update() {
     if (keys['KeyD'] || keys['ArrowRight']) me.x += PLAYER_SPEED;
 
     // virtual joystick (v21)
-    if (joystick.active) {
+    if (currentTouchMode === 'joystick' && joystick.active) {
         let vx = joystick.vectorX;
         let vy = joystick.vectorY;
 
         // Map joystick vectors to internal coordinates based on orientation/role
         if (isVertical) {
             if (role === 'p1') {
-                // Portrait P1: Joystick Up is Internal Left (-X), Side is Internal Y
                 me.x -= vy * PLAYER_SPEED;
                 me.y += vx * PLAYER_SPEED;
             } else {
-                // Portrait P2: Joystick Up is Internal Right (+X), Side is Internal Y
                 me.x += vy * PLAYER_SPEED;
                 me.y -= vx * PLAYER_SPEED;
             }
         } else {
-            // Landscape: Standard mapping
             me.x += vx * PLAYER_SPEED;
             me.y += vy * PLAYER_SPEED;
+        }
+    }
+
+    // smooth drag (v22)
+    if (currentTouchMode === 'smooth' && targetTouchPos) {
+        const dx = targetTouchPos.x - me.x;
+        const dy = targetTouchPos.y - me.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 5) {
+            // High-precision tracking with ease-out
+            const speed = Math.min(PLAYER_SPEED, dist * 0.4);
+            me.x += (dx / dist) * speed;
+            me.y += (dy / dist) * speed;
         }
     }
 

@@ -63,12 +63,19 @@
                     </div>
                 </div>
                 <div class="setting-row">
-                    <div class="setting-group" style="width: 100%;">
+                    <div class="setting-group">
                         <p class="setting-label">Win Limit</p>
                         <select id="compWinLimit" class="premium-select">
                             <option value="3">3 Goals</option>
                             <option value="5" selected>5 Goals</option>
                             <option value="10">10 Goals</option>
+                        </select>
+                    </div>
+                    <div class="setting-group">
+                        <p class="setting-label">Touch Mode</p>
+                        <select id="compTouchMode" class="premium-select">
+                            <option value="joystick" selected>Joystick</option>
+                            <option value="smooth">Smooth Drag</option>
                         </select>
                     </div>
                 </div>
@@ -115,13 +122,22 @@
                                     <span id="displayRoomCode">----</span>
                                     <button id="copyCodeBtn" class="icon-btn">📋</button>
                                 </div>
-                                <div class="setting-group compact">
-                                    <p class="setting-label">Win Limit</p>
-                                    <select id="onlineWinLimit" class="premium-select">
-                                        <option value="3">3 Goals</option>
-                                        <option value="5" selected>5 Goals</option>
-                                        <option value="10">10 Goals</option>
-                                    </select>
+                                <div class="setting-row compact">
+                                    <div class="setting-group">
+                                        <p class="setting-label">Win Limit</p>
+                                        <select id="onlineWinLimit" class="premium-select">
+                                            <option value="3">3 Goals</option>
+                                            <option value="5" selected>5 Goals</option>
+                                            <option value="10">10 Goals</option>
+                                        </select>
+                                    </div>
+                                    <div class="setting-group">
+                                        <p class="setting-label">Touch Mode</p>
+                                        <select id="onlineTouchMode" class="premium-select">
+                                            <option value="joystick" selected>Joystick</option>
+                                            <option value="smooth">Smooth Drag</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                             <div class="divider-v"></div>
