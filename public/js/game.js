@@ -47,24 +47,6 @@ let isVertical = false;
 let isPaused = false;
 let keys = {};
 let targetTouchPos = null;
-
-// Joystick State (v21)
-let joystick = {
-    active: false,
-    baseX: 0,
-    baseY: 0,
-    stickX: 0,
-    stickY: 0,
-    vectorX: 0,
-    vectorY: 0,
-    touchId: null
-};
-const joystickBaseEl = document.getElementById('joystick-base');
-const joystickStickEl = document.getElementById('joystick-stick');
-const JOYSTICK_RADIUS = 60;
-const JOYSTICK_DEADZONE = 5; // Pixels to ignore for better precision
-
-let ball = { x: WIDTH / 2, y: HEIGHT / 2, radius: 18, dx: 0, dy: 0, owner: null };
 let visualBall = { x: WIDTH / 2, y: HEIGHT / 2 }; // V19: Smooth rendering ball
 let p1 = { x: 240, y: 400, radius: 35, color: '#3b82f6', score: 0 };
 let p2 = { x: 960, y: 400, radius: 35, color: '#ef4444', score: 0 };
@@ -82,7 +64,6 @@ let currentAiDifficulty = 'easy';
 let currentWinLimit = 5;
 let currentP1Color = '#3b82f6';
 let currentP2Color = '#ef4444';
-let currentTouchMode = 'joystick'; // 'joystick' or 'smooth'
 
 // Initialize
 function init() {
@@ -178,7 +159,6 @@ function setupInput() {
         p1.score = 0; p2.score = 0;
         score1El.innerText = "0"; score2El.innerText = "0";
         currentP2Color = '#ef4444'; // AI Default
-        currentTouchMode = document.getElementById('compTouchMode').value;
         updateScorecardColors();
 
         computerModal.classList.add('hidden');
@@ -218,12 +198,10 @@ function setupInput() {
         document.querySelector('.mode-selection').classList.add('hidden');
 
         if (onlineType === 'random') {
-            currentTouchMode = document.getElementById('onlineTouchMode').value;
             socket.emit('findMatch', { color: currentP1Color });
         } else {
             const code = joinRoomInput.value.trim().toUpperCase();
             if (code) {
-                currentTouchMode = document.getElementById('onlineTouchMode').value;
                 socket.emit('joinPrivateRoom', { roomId: code, color: currentP1Color });
             } else {
                 // If they created but didn't join... just wait for opponent? 
@@ -244,62 +222,17 @@ function setupInput() {
 function setupTouch() {
     canvas.addEventListener('touchstart', (e) => {
         if (status !== 'playing' || isPaused) return;
-
-        const touch = e.changedTouches[0];
-
-        if (currentTouchMode === 'joystick') {
-            // Use first touch for joystick if not already active
-            if (!joystick.active) {
-                const rect = canvas.getBoundingClientRect();
-
-                joystick.active = true;
-                joystick.touchId = touch.identifier;
-                joystick.baseX = touch.clientX - rect.left;
-                joystick.baseY = touch.clientY - rect.top;
-
-                joystickBaseEl.style.left = `${joystick.baseX - JOYSTICK_RADIUS}px`;
-                joystickBaseEl.style.top = `${joystick.baseY - JOYSTICK_RADIUS}px`;
-                joystickBaseEl.classList.remove('hidden');
-
-                // Haptic Feedback (v21)
-                if (navigator.vibrate) navigator.vibrate(10);
-
-                updateJoystick(touch);
-            }
-        } else {
-            // Smooth Drag Mode
-            handleDirectTouch(touch);
-        }
+        handleDirectTouch(e.changedTouches[0]);
     }, { passive: false });
 
     window.addEventListener('touchmove', (e) => {
         if (status !== 'playing' || isPaused) return;
         e.preventDefault();
-
-        if (currentTouchMode === 'joystick') {
-            if (!joystick.active) return;
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                if (e.changedTouches[i].identifier === joystick.touchId) {
-                    updateJoystick(e.changedTouches[i]);
-                    break;
-                }
-            }
-        } else {
-            handleDirectTouch(e.changedTouches[0]);
-        }
+        handleDirectTouch(e.changedTouches[0]);
     }, { passive: false });
 
-    window.addEventListener('touchend', (e) => {
-        if (currentTouchMode === 'joystick') {
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                if (e.changedTouches[i].identifier === joystick.touchId) {
-                    resetJoystick();
-                    break;
-                }
-            }
-        } else {
-            targetTouchPos = null;
-        }
+    window.addEventListener('touchend', () => {
+        targetTouchPos = null;
     });
 
     function handleDirectTouch(touch) {
@@ -323,47 +256,6 @@ function setupTouch() {
             const internalY = (touchY / rect.height) * HEIGHT;
             targetTouchPos = { x: internalX, y: internalY };
         }
-    }
-
-    function updateJoystick(touch) {
-        const rect = canvas.getBoundingClientRect();
-        const touchX = touch.clientX - rect.left;
-        const touchY = touch.clientY - rect.top;
-
-        const dx = touchX - joystick.baseX;
-        const dy = touchY - joystick.baseY;
-        const dist = Math.hypot(dx, dy);
-
-        if (dist < JOYSTICK_DEADZONE) {
-            joystick.stickX = 0;
-            joystick.stickY = 0;
-            joystick.vectorX = 0;
-            joystick.vectorY = 0;
-        } else {
-            const maxDist = JOYSTICK_RADIUS;
-            const speed = Math.min(dist, maxDist);
-            const angle = Math.atan2(dy, dx);
-
-            joystick.stickX = Math.cos(angle) * speed;
-            joystick.stickY = Math.sin(angle) * speed;
-
-            // Normalize vector (-1 to 1)
-            // We subtract deadzone from distance for a smoother ramp-up
-            const normalizedMag = (speed - JOYSTICK_DEADZONE) / (maxDist - JOYSTICK_DEADZONE);
-            joystick.vectorX = Math.cos(angle) * normalizedMag;
-            joystick.vectorY = Math.sin(angle) * normalizedMag;
-        }
-
-        joystickStickEl.style.transform = `translate(${joystick.stickX}px, ${joystick.stickY}px)`;
-    }
-
-    function resetJoystick() {
-        joystick.active = false;
-        joystick.touchId = null;
-        joystick.vectorX = 0;
-        joystick.vectorY = 0;
-        joystickBaseEl.classList.add('hidden');
-        joystickStickEl.style.transform = `translate(0, 0)`;
     }
 }
 
@@ -519,35 +411,15 @@ function update() {
     if (keys['KeyA'] || keys['ArrowLeft']) me.x -= PLAYER_SPEED;
     if (keys['KeyD'] || keys['ArrowRight']) me.x += PLAYER_SPEED;
 
-    // virtual joystick (v21)
-    if (currentTouchMode === 'joystick' && joystick.active) {
-        let vx = joystick.vectorX;
-        let vy = joystick.vectorY;
-
-        // Map joystick vectors to internal coordinates based on orientation/role
-        if (isVertical) {
-            if (role === 'p1') {
-                me.x -= vy * PLAYER_SPEED;
-                me.y += vx * PLAYER_SPEED;
-            } else {
-                me.x += vy * PLAYER_SPEED;
-                me.y -= vx * PLAYER_SPEED;
-            }
-        } else {
-            me.x += vx * PLAYER_SPEED;
-            me.y += vy * PLAYER_SPEED;
-        }
-    }
-
-    // smooth drag (v22)
-    if (currentTouchMode === 'smooth' && targetTouchPos) {
+    // smooth touch movement (v24)
+    if (targetTouchPos) {
         const dx = targetTouchPos.x - me.x;
         const dy = targetTouchPos.y - me.y;
         const dist = Math.hypot(dx, dy);
 
-        if (dist > 5) {
-            // High-precision tracking with ease-out
-            const speed = Math.min(PLAYER_SPEED, dist * 0.4);
+        if (dist > 2) {
+            // Decelerate as we get closer to avoid jitter, but stay snappy
+            const speed = Math.min(PLAYER_SPEED, dist * 0.5);
             me.x += (dx / dist) * speed;
             me.y += (dy / dist) * speed;
         }
@@ -772,6 +644,7 @@ function resetMatchLocal() {
     ballBuffer = [];
     visualBall.x = WIDTH / 2;
     visualBall.y = HEIGHT / 2;
+    targetTouchPos = null;
 }
 
 function draw() {
