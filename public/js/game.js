@@ -59,8 +59,8 @@ let lastBallEmitTime = 0;
 let p1Buffer = [];
 let p2Buffer = [];
 let ballBuffer = [];
-let lastResetTime = 0; // V29: Protection against "ghost" packets after goals
-const INTERPOLATION_DELAY = 120;
+let lastResetTime = 0;
+const INTERPOLATION_DELAY = 100; // V31: Reduced to 100ms for more accurate real-time feel
 
 // Global Settings (v16)
 let currentAiDifficulty = 'easy';
@@ -318,18 +318,23 @@ socket.on('scoreSync', (data) => {
     if (p1.score !== data.score1) {
         p1.score = data.score1;
         score1El.innerText = p1.score;
-        // Skip expensive animations on small mobile screens (v29)
-        if (window.innerWidth > 600) {
-            score1El.style.transform = "scale(1.2)";
-            setTimeout(() => score1El.style.transform = "scale(1)", 200);
+        // V33: Trigger pulse
+        const card1 = document.getElementById('p1-card');
+        if (card1) {
+            card1.classList.remove('pulse');
+            void card1.offsetWidth; // Force reflow
+            card1.classList.add('pulse');
         }
     }
     if (p2.score !== data.score2) {
         p2.score = data.score2;
         score2El.innerText = p2.score;
-        if (window.innerWidth > 600) {
-            score2El.style.transform = "scale(1.2)";
-            setTimeout(() => score2El.style.transform = "scale(1)", 200);
+        // V33: Trigger pulse
+        const card2 = document.getElementById('p2-card');
+        if (card2) {
+            card2.classList.remove('pulse');
+            void card2.offsetWidth; // Force reflow
+            card2.classList.add('pulse');
         }
     }
 
@@ -762,8 +767,9 @@ function drawBall() {
         visualBall.x = ball.x;
         visualBall.y = ball.y;
     } else {
-        visualBall.x += (ball.x - visualBall.x) * 0.4;
-        visualBall.y += (ball.y - visualBall.y) * 0.4;
+        // V31: Increased lerp factor to 0.7 for snappier ball movement
+        visualBall.x += (ball.x - visualBall.x) * 0.7;
+        visualBall.y += (ball.y - visualBall.y) * 0.7;
     }
 
     ctx.translate(visualBall.x, visualBall.y);

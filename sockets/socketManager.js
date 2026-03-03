@@ -2,8 +2,8 @@ const rooms = {}; // stores state for each match: { roomId: { players: [], state
 
 const INITIAL_STATE = {
     ball: { x: 600, y: 400, dx: 0, dy: 0, owner: null },
-    p1: { x: 240, y: 400, score: 0 },
-    p2: { x: 960, y: 400, score: 0 },
+    p1: { x: 240, y: 400, dx: 0, dy: 0, score: 0 },
+    p2: { x: 960, y: 400, dx: 0, dy: 0, score: 0 },
     status: 'waiting' // waiting, playing, finished
 };
 
@@ -165,15 +165,43 @@ const socketManager = (io) => {
 
                 if (dist < minPlayerDist) {
                     const angle = Math.atan2(dy, dx);
-                    const force = 22;
-                    ball.dx = Math.cos(angle) * force;
-                    ball.dy = Math.sin(angle) * force;
+
+                    // V33: Directional Hit Enforcement
+                    // Ensure ball velocity aligns with player momentum to prevent "glitch through"
+                    const hitPower = 22;
+                    const pVelX = p.dx || 0;
+                    const pVelY = p.dy || 0;
+                    const pSpeed = Math.hypot(pVelX, pVelY);
+
+                    // Base hit velocity from angle
+                    let targetDx = Math.cos(angle) * hitPower;
+                    let targetDy = Math.sin(angle) * hitPower;
+
+                    // If player is moving fast, force ball in player's direction (Carrying)
+                    if (pSpeed > 2) {
+                        const dot = (targetDx * pVelX + targetDy * pVelY) / (hitPower * pSpeed);
+                        // If hit direction is too far from player heading, rotate it towards heading
+                        if (dot < 0.2) {
+                            targetDx = (targetDx * 0.5) + (pVelX * 0.8);
+                            targetDy = (targetDy * 0.5) + (pVelY * 0.8);
+                        }
+                    }
+
+                    ball.dx = targetDx + (pVelX * 0.3);
+                    ball.dy = targetDy + (pVelY * 0.3);
+
+                    // Clamp speed
+                    const currentSpeed = Math.hypot(ball.dx, ball.dy);
+                    const MAX_SPEED = 38; // V33: Slightly higher max speed for powerful hits
+                    if (currentSpeed > MAX_SPEED) {
+                        ball.dx = (ball.dx / currentSpeed) * MAX_SPEED;
+                        ball.dy = (ball.dy / currentSpeed) * MAX_SPEED;
+                    }
 
                     // ANTI-STUCK: Aggressive resolution
-                    // We push the ball outside the radius plus a small margin (5px)
                     const overlap = minPlayerDist - dist;
-                    ball.x += Math.cos(angle) * (overlap + 5);
-                    ball.y += Math.sin(angle) * (overlap + 5);
+                    ball.x += Math.cos(angle) * (overlap + 6);
+                    ball.y += Math.sin(angle) * (overlap + 6);
                 }
             });
         }
@@ -204,8 +232,13 @@ const socketManager = (io) => {
             const room = rooms[currentRoomId];
             const role = room.players[0] === socket.id ? 'p1' : 'p2';
 
-            room.state[role].x = data.x;
-            room.state[role].y = data.y;
+            const p = room.state[role];
+            // V32: Calculate velocity for collision bias
+            p.dx = data.x - p.x;
+            p.dy = data.y - p.y;
+
+            p.x = data.x;
+            p.y = data.y;
         });
 
         // V18: ballUpdate is now used as a hint for hits, but server dominates

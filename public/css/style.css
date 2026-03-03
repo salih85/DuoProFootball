@@ -380,85 +380,138 @@ body {
   display: none !important;
 }
 
-/* --- Header Sync (Stabilized v27) --- */
+/* --- Header (V30: Pure Overlay) --- */
 .ui-header {
   position: fixed;
-  /* Decouple from canvas container */
   top: 0;
   left: 0;
   width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 1rem 1.5rem;
+  height: 0;
+  /* No height to avoid intercepting touches */
   z-index: 100;
   pointer-events: none;
-  box-sizing: border-box;
-  contain: layout;
-  /* V27 Optimization */
 }
 
 .score-card {
-  pointer-events: auto;
-  /* Re-enable pointer events for specific cards */
-  background: var(--card-bg, rgba(0, 0, 0, 0.4));
-  padding: 0.4rem 1.2rem;
-  border-radius: 8px;
+  position: fixed;
+  /* V30: Absolute Isolation */
+  top: 15px;
+  background: rgba(15, 15, 15, 0.6);
+  /* Darker Glass */
+  backdrop-filter: blur(25px) saturate(180%);
+  /* Premium Glassmorphism */
+  -webkit-backdrop-filter: blur(25px) saturate(180%);
+  padding: 1.5rem 3rem;
+  /* V33: Colossal Scale */
+  border-radius: 20px;
   display: flex;
   align-items: center;
-  gap: 0.8rem;
-  font-size: 1.6rem;
+  gap: 2rem;
+  font-size: 5rem;
+  /* V33: Colossal */
   font-weight: 900;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  min-width: 100px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  min-width: 220px;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  /* Lighter shadow for mobile */
-  transition: transform 0.1s ease-out;
-  /* Simpler transition */
   color: white;
   transform: translate3d(0, 0, 0);
-  /* Full hardware acceleration */
-  will-change: transform;
+  pointer-events: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  contain: layout;
+  /* v33: Allow pulse */
+  will-change: transform, box-shadow;
+  transition: box-shadow 0.3s ease;
+}
+
+.score-card.pulse {
+  animation: scorecard-pulse 0.4s ease-out;
+}
+
+@keyframes scorecard-pulse {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(0, 0, 0) scale(1.15);
+  }
+
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
 }
 
 .score-card.p1-score {
-  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.2);
+  left: 20px;
+  box-shadow: 0 0 40px rgba(59, 130, 246, 0.4), inset 0 0 15px rgba(59, 130, 246, 0.2);
+  border-left: 5px solid #3b82f6;
 }
 
 .score-card.p2-score {
-  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.2);
+  right: 20px;
+  box-shadow: 0 0 40px rgba(239, 68, 68, 0.4), inset 0 0 15px rgba(239, 68, 68, 0.2);
+  border-right: 5px solid #ef4444;
 }
 
 .score-card .label {
-  font-size: 0.65rem;
-  opacity: 0.8;
+  font-size: 1.8rem;
+  /* V33: Proportionate label */
+  opacity: 0.7;
   text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 2px;
 }
 
-/* --- Goal Announcement --- */
+/* --- Goal Announcement (V31: Pinned Center) --- */
 .goal-announcement {
-  font-size: 1.8rem;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.5);
+  font-size: 6rem;
+  /* V31: Massive Impact */
   font-weight: 900;
   color: var(--accent);
   opacity: 0;
-  transition: all 0.3s;
-  text-shadow: 2px 2px 0px #000;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  text-shadow: 0 0 30px rgba(0, 0, 0, 0.5), 4px 4px 0px #000;
   white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
 }
 
-/* V29: Extreme Lean Scorecards for Mobile */
+/* V34: Mobile Resp. Scaling */
 @media (max-width: 768px) {
   .score-card {
+    top: 10px;
+    padding: 0.8rem 1.5rem;
+    font-size: 2.2rem;
+    /* Scaled down for mobile */
+    min-width: 120px;
+    gap: 0.8rem;
     transition: none !important;
-    box-shadow: none !important;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+  }
+
+  .score-card.p2-score {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+  }
+
+  .score-card .label {
+    font-size: 1rem;
+    letter-spacing: 1px;
+  }
+
+  .goal-announcement {
+    font-size: 4rem;
   }
 }
 
 .goal-announcement.show {
   opacity: 1;
-  transform: scale(1.1);
+  transform: translate(-50%, -50%) scale(1.1);
 }
 
 /* --- Pitch Container --- */
