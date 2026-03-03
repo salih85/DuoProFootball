@@ -58,7 +58,7 @@ let lastBallEmitTime = 0;
 let p1Buffer = [];
 let p2Buffer = [];
 let ballBuffer = [];
-const INTERPOLATION_DELAY = 100; // 100ms buffer for smooth interpolation
+const INTERPOLATION_DELAY = 120; // V26: Slightly increased to 120ms for better layout stability
 
 // Global Settings (v16)
 let currentAiDifficulty = 'easy';
@@ -309,10 +309,21 @@ socket.on('stateUpdate', (state) => {
 
 socket.on('scoreSync', (data) => {
     if (gameMode !== 'online') return;
-    p1.score = data.score1;
-    p2.score = data.score2;
-    score1El.innerText = p1.score;
-    score2El.innerText = p2.score;
+
+    // Only update DOM if scores actually changed (v26)
+    if (p1.score !== data.score1) {
+        p1.score = data.score1;
+        score1El.innerText = p1.score;
+        score1El.style.transform = "scale(1.2)";
+        setTimeout(() => score1El.style.transform = "scale(1)", 200);
+    }
+    if (p2.score !== data.score2) {
+        p2.score = data.score2;
+        score2El.innerText = p2.score;
+        score2El.style.transform = "scale(1.2)";
+        setTimeout(() => score2El.style.transform = "scale(1)", 200);
+    }
+
     resetMatchLocal(); // FORCE RESET POSITIONS LOCALLY
     showGoal();
 });

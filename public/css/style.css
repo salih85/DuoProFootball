@@ -380,19 +380,25 @@ body {
   display: none !important;
 }
 
-/* --- Header Sync --- */
+/* --- Header Sync (Stabilized v26) --- */
 .ui-header {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
-  max-width: 1200px;
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 0.5rem 1rem;
-  z-index: 10;
+  align-items: flex-start;
+  padding: 1.5rem 2rem;
+  z-index: 100;
+  pointer-events: none;
+  /* Allow clicks to pass through header space to canvas if needed */
   box-sizing: border-box;
 }
 
 .score-card {
+  pointer-events: auto;
+  /* Re-enable pointer events for specific cards */
   background: var(--card-bg, rgba(0, 0, 0, 0.4));
   padding: 0.4rem 1.2rem;
   border-radius: 8px;
@@ -405,9 +411,11 @@ body {
   min-width: 100px;
   justify-content: center;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-  transition: all 0.3s ease;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.3s;
   color: white;
-  /* Always white text for contrast on darker colors */
+  transform: translateZ(0);
+  /* Hardware Acceleration */
+  will-change: transform;
 }
 
 .score-card.p1-score {
