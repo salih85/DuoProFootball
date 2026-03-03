@@ -47,6 +47,7 @@ let isVertical = false;
 let isPaused = false;
 let keys = {};
 let targetTouchPos = null;
+let ball = { x: WIDTH / 2, y: HEIGHT / 2, radius: 18, dx: 0, dy: 0, owner: null };
 let visualBall = { x: WIDTH / 2, y: HEIGHT / 2 }; // V19: Smooth rendering ball
 let p1 = { x: 240, y: 400, radius: 35, color: '#3b82f6', score: 0 };
 let p2 = { x: 960, y: 400, radius: 35, color: '#ef4444', score: 0 };
