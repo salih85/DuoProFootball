@@ -344,12 +344,12 @@ socket.on('opponentDisconnected', () => {
 });
 
 function syncState(state) {
-    const now = Date.now();
+    const arrivalTime = Date.now(); // V28: Use arrival time for consistent interpolation
 
-    // Store states in buffers with server timestamp
-    if (state.p1) p1Buffer.push({ x: state.p1.x, y: state.p1.y, ts: state.ts });
-    if (state.p2) p2Buffer.push({ x: state.p2.x, y: state.p2.y, ts: state.ts });
-    if (state.ball) ballBuffer.push({ x: state.ball.x, y: state.ball.y, dx: state.ball.dx, dy: state.ball.dy, ts: state.ts });
+    // Store states in buffers with arrival timestamp
+    if (state.p1) p1Buffer.push({ x: state.p1.x, y: state.p1.y, ts: arrivalTime });
+    if (state.p2) p2Buffer.push({ x: state.p2.x, y: state.p2.y, ts: arrivalTime });
+    if (state.ball) ballBuffer.push({ x: state.ball.x, y: state.ball.y, dx: state.ball.dx, dy: state.ball.dy, ts: arrivalTime });
 
     // Keep buffers lean (last 10 states)
     if (p1Buffer.length > 10) p1Buffer.shift();
