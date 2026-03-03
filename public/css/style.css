@@ -512,7 +512,8 @@ body {
 
   .goal-announcement {
     font-size: 4rem;
-    text-shadow: 2px 2px 0px #000 !important;
+    text-shadow: none !important;
+    /* V38: Zero-cost rendering */
   }
 }
 

@@ -576,17 +576,7 @@ function update() {
             ball.x += Math.cos(angle) * (overlap + 10); // Offset by 10px buffer
             ball.y += Math.sin(angle) * (overlap + 10);
 
-            if (gameMode === 'online' && ((role === 'p1' && p === p1) || (role === 'p2' && p === p2))) {
-                const now = Date.now();
-                // Send velocity hint to server
-                if (now - lastBallEmitTime > 30) {
-                    socket.emit('ballUpdate', {
-                        dx: parseFloat(ball.dx.toFixed(2)),
-                        dy: parseFloat(ball.dy.toFixed(2))
-                    });
-                    lastBallEmitTime = now;
-                }
-            }
+            // V38: Removed ballUpdate emission. Server manages physics entirely.
         }
     });
 
@@ -675,8 +665,9 @@ function resetMatchLocal() {
     p1Buffer = [];
     p2Buffer = [];
     ballBuffer = [];
-    visualBall.x = WIDTH / 2;
-    visualBall.y = HEIGHT / 2;
+    // V38: Precise integer snap to prevent sub-pixel rendering bugs/lerp loops
+    visualBall.x = 600;
+    visualBall.y = 400;
     targetTouchPos = null;
     lastResetTime = Date.now(); // V29: Mark reset time
 }

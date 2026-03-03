@@ -247,18 +247,13 @@ const socketManager = (io) => {
             p.dx = data.x - p.x;
             p.dy = data.y - p.y;
 
-            p.x = data.x;
-            p.y = data.y;
+            // V38: Enforce field boundaries and clean coordinates on server
+            p.x = Math.max(PLAYER_RADIUS, Math.min(WIDTH - PLAYER_RADIUS, data.x || 0));
+            p.y = Math.max(PLAYER_RADIUS, Math.min(HEIGHT - PLAYER_RADIUS, data.y || 0));
         });
 
-        // V18: ballUpdate is now used as a hint for hits, but server dominates
-        socket.on('ballUpdate', (data) => {
-            if (!currentRoomId || !rooms[currentRoomId]) return;
-            const room = rooms[currentRoomId];
-            // Accept velocity hints to keep immediate feedback, but server will correct
-            room.state.ball.dx = data.dx;
-            room.state.ball.dy = data.dy;
-        });
+        // V38: Total Server Authority (REMOVED ballUpdate handler)
+        // Physics logic in the main loop now dictates ball movement entirely.
 
         socket.on('disconnect', () => {
             if (currentRoomId && rooms[currentRoomId]) {
