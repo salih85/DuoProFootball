@@ -221,8 +221,8 @@ const socketManager = (io) => {
             else room.state.p2.score++;
 
             room.state.ball = { x: 600, y: 400, dx: 0, dy: 0 };
-            room.state.p1.x = 240; room.state.p1.y = 400;
-            room.state.p2.x = 960; room.state.p2.y = 400;
+            room.state.p1.x = 240; room.state.p1.y = 400; room.state.p1.dx = 0; room.state.p1.dy = 0;
+            room.state.p2.x = 960; room.state.p2.y = 400; room.state.p2.dx = 0; room.state.p2.dy = 0;
 
             io.to(room.id || currentRoomId).emit('scoreSync', {
                 score1: room.state.p1.score,

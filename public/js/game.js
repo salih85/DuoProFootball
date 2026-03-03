@@ -7,7 +7,7 @@ const WIDTH = 1200;
 const HEIGHT = 800;
 const FRICTION = 0.99;
 const PLAYER_SPEED = 10;
-const BALL_MAX_SPEED = 22;
+const BALL_MAX_SPEED = 42; // V37: Sync with server MAX_SPEED
 const GOAL_WIDTH = 30;
 const GOAL_HEIGHT = 240;
 const GOAL_Y = (HEIGHT - GOAL_HEIGHT) / 2;
@@ -358,7 +358,8 @@ socket.on('opponentDisconnected', () => {
 
 function syncState(state) {
     // V29: Ignore server updates for 250ms after a local reset to prevent "pull-back" ghosting
-    if (Date.now() - lastResetTime < 250) return;
+    // V37: Increased guard to 600ms for stable server-authoritative snaps
+    if (Date.now() - lastResetTime < 600) return;
 
     const arrivalTime = Date.now();
 
@@ -383,9 +384,9 @@ function syncState(state) {
             me.x = myState.x;
             me.y = myState.y;
         } else if (dist > 15) {
-            // Soft drift towards server state - REDUCED to 0.04 for less "stickiness"
-            me.x += (myState.x - me.x) * 0.04;
-            me.y += (myState.y - me.y) * 0.04;
+            // V37: Increased drift to 0.15 for much snappier response to server position
+            me.x += (myState.x - me.x) * 0.15;
+            me.y += (myState.y - me.y) * 0.15;
         }
     }
 }
@@ -564,7 +565,7 @@ function update() {
 
         if (dist < minPlayerDist) {
             const angle = Math.atan2(dy, dx);
-            const force = 22; // Strong hit force
+            const force = 28; // V37: Sync with server hitPower
 
             // Update local state immediately
             ball.dx = Math.cos(angle) * force;
