@@ -318,23 +318,25 @@ socket.on('scoreSync', (data) => {
     if (p1.score !== data.score1) {
         p1.score = data.score1;
         score1El.innerText = p1.score;
-        // V33: Trigger pulse
+        // V36: Trigger pulse without forced reflow (no-lag)
         const card1 = document.getElementById('p1-card');
         if (card1) {
             card1.classList.remove('pulse');
-            void card1.offsetWidth; // Force reflow
-            card1.classList.add('pulse');
+            requestAnimationFrame(() => {
+                card1.classList.add('pulse');
+            });
         }
     }
     if (p2.score !== data.score2) {
         p2.score = data.score2;
         score2El.innerText = p2.score;
-        // V33: Trigger pulse
+        // V36: Trigger pulse without forced reflow (no-lag)
         const card2 = document.getElementById('p2-card');
         if (card2) {
             card2.classList.remove('pulse');
-            void card2.offsetWidth; // Force reflow
-            card2.classList.add('pulse');
+            requestAnimationFrame(() => {
+                card2.classList.add('pulse');
+            });
         }
     }
 

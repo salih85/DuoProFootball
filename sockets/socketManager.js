@@ -166,43 +166,52 @@ const socketManager = (io) => {
                 if (dist < minPlayerDist) {
                     const angle = Math.atan2(dy, dx);
 
-                    // V33: Directional Hit Enforcement
-                    // Ensure ball velocity aligns with player momentum to prevent "glitch through"
-                    const hitPower = 25;
+                    // V36: Final Hardened Directional Momentum
+                    // Force ball in player's path and ensure a decisive exit
+                    const hitPower = 28; // v36: Snappier power
                     const pVelX = p.dx || 0;
                     const pVelY = p.dy || 0;
                     const pSpeed = Math.hypot(pVelX, pVelY);
 
-                    
-                    // Base hit velocity from angle
                     let targetDx = Math.cos(angle) * hitPower;
                     let targetDy = Math.sin(angle) * hitPower;
 
-                    // If player is moving fast, force ball in player's direction (Carrying)
-                    if (pSpeed > 2) {
-                        const dot = (targetDx * pVelX + targetDy * pVelY) / (hitPower * pSpeed);
-                        // If hit direction is too far from player heading, rotate it towards heading
-                        if (dot < 0.2) {
-                            targetDx = (targetDx * 0.5) + (pVelX * 0.8);
-                            targetDy = (targetDy * 0.5) + (pVelY * 0.8);
+                    // v36: Decisive carrying for all speeds > 1
+                    if (pSpeed > 1) {
+                        const pDirX = pVelX / pSpeed;
+                        const pDirY = pVelY / pSpeed;
+                        const dot = (targetDx * pDirX + targetDy * pDirY) / hitPower;
+
+                        // Strict momentum cone enforcement (prevents backward hits)
+                        if (dot < 0.5) {
+                            targetDx = (pDirX * hitPower * 0.9) + (targetDx * 0.1);
+                            targetDy = (pDirY * hitPower * 0.9) + (targetDy * 0.1);
                         }
                     }
 
-                    ball.dx = targetDx + (pVelX * 0.3);
-                    ball.dy = targetDy + (pVelY * 0.3);
+                    ball.dx = targetDx + (pVelX * 0.45); // v36: Higher inheritance
+                    ball.dy = targetDy + (pVelY * 0.45);
 
-                    // Clamp speed
-                    const currentSpeed = Math.hypot(ball.dx, ball.dy);
-                    const MAX_SPEED = 38; // V33: Slightly higher max speed for powerful hits
-                    if (currentSpeed > MAX_SPEED) {
-                        ball.dx = (ball.dx / currentSpeed) * MAX_SPEED;
-                        ball.dy = (ball.dy / currentSpeed) * MAX_SPEED;
+                    // Force Decisive Exit Speed
+                    const newSpeed = Math.hypot(ball.dx, ball.dy);
+                    if (newSpeed < 18) {
+                        const factor = 18 / (newSpeed || 1);
+                        ball.dx *= factor;
+                        ball.dy *= factor;
                     }
 
-                    // ANTI-STUCK: Aggressive resolution
+                    // Clamp speed
+                    const MAX_SPEED = 42; // v36: Slightly higher for pro feels
+                    const finalSpeed = Math.hypot(ball.dx, ball.dy);
+                    if (finalSpeed > MAX_SPEED) {
+                        ball.dx = (ball.dx / finalSpeed) * MAX_SPEED;
+                        ball.dy = (ball.dy / finalSpeed) * MAX_SPEED;
+                    }
+
+                    // ANTI-STUCK (v36: Maximum 8px Margin)
                     const overlap = minPlayerDist - dist;
-                    ball.x += Math.cos(angle) * (overlap + 6);
-                    ball.y += Math.sin(angle) * (overlap + 6);
+                    ball.x += Math.cos(angle) * (overlap + 8);
+                    ball.y += Math.sin(angle) * (overlap + 8);
                 }
             });
         }
