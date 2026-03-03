@@ -482,21 +482,27 @@ body {
   pointer-events: none;
 }
 
-/* V34: Mobile Resp. Scaling */
+/* V35: Mobile Performance Polish (Zero Lag) */
 @media (max-width: 768px) {
   .score-card {
     top: 10px;
     padding: 0.8rem 1.5rem;
     font-size: 2.2rem;
-    /* Scaled down for mobile */
     min-width: 120px;
     gap: 0.8rem;
     transition: none !important;
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(10, 10, 10, 0.95) !important;
+    box-shadow: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
   }
 
+  .score-card.p1-score,
   .score-card.p2-score {
-    box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+    box-shadow: none !important;
+    border-left: 2px solid #3b82f6 !important;
+    border-right: 2px solid #ef4444 !important;
   }
 
   .score-card .label {
@@ -506,6 +512,7 @@ body {
 
   .goal-announcement {
     font-size: 4rem;
+    text-shadow: 2px 2px 0px #000 !important;
   }
 }
 

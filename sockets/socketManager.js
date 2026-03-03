@@ -168,7 +168,7 @@ const socketManager = (io) => {
 
                     // V33: Directional Hit Enforcement
                     // Ensure ball velocity aligns with player momentum to prevent "glitch through"
-                    const hitPower = 22;
+                    const hitPower = 25;
                     const pVelX = p.dx || 0;
                     const pVelY = p.dy || 0;
                     const pSpeed = Math.hypot(pVelX, pVelY);
