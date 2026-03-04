@@ -1,7 +1,7 @@
 const rooms = {}; // stores state for each match: { roomId: { players: [], state: {...} } }
 
 const INITIAL_STATE = {
-    ball: { x: 600, y: 400, dx: 0, dy: 0, owner: null },
+    b: { x: 600, y: 400, dx: 0, dy: 0, owner: null },
     p1: { x: 240, y: 400, dx: 0, dy: 0, score: 0 },
     p2: { x: 960, y: 400, dx: 0, dy: 0, score: 0 },
     status: 'waiting' // waiting, playing, finished
@@ -24,25 +24,51 @@ const socketManager = (io) => {
 
         let currentRoomId = null;
 
+        function leaveCurrentRoom() {
+            if (currentRoomId && rooms[currentRoomId]) {
+                const room = rooms[currentRoomId];
+                room.players = room.players.filter(id => id !== socket.id);
+                socket.leave(currentRoomId);
+                console.log(`🚪 Player ${socket.id} left room ${currentRoomId}`);
+
+                if (room.players.length === 0) {
+                    if (room.tickInterval) clearInterval(room.tickInterval);
+                    delete rooms[currentRoomId];
+                    console.log(`🗑️ Room ${currentRoomId} deleted because it's empty.`);
+                } else {
+                    // Notify other player
+                    socket.to(currentRoomId).emit('opponentDisconnected');
+                }
+                currentRoomId = null;
+            }
+        }
+
         // --- Standard Matchmaking ---
         socket.on('findMatch', (data) => {
+            leaveCurrentRoom();
+            console.log(`🔍 Player ${socket.id} searching for match...`);
             let roomId = Object.keys(rooms).find(id => !rooms[id].isPrivate && rooms[id].players.length === 1);
 
             if (!roomId) {
                 roomId = `room_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+                console.log(`🆕 Creating new room: ${roomId}`);
                 rooms[roomId] = {
                     players: [],
                     state: JSON.parse(JSON.stringify(INITIAL_STATE)),
                     isPrivate: false,
                     winLimit: 5 // Default for public matches
                 };
+            } else {
+                console.log(`🤝 Found existing room: ${roomId}`);
             }
             joinOrCreate(roomId, data);
         });
 
         // --- Private Rooms (v16) ---
         socket.on('createPrivateRoom', (data) => {
+            leaveCurrentRoom();
             const shortId = Math.random().toString(36).substr(2, 4).toUpperCase();
+            console.log(`🔑 Creating private room: ${shortId}`);
             rooms[shortId] = {
                 players: [],
                 state: JSON.parse(JSON.stringify(INITIAL_STATE)),
@@ -54,10 +80,13 @@ const socketManager = (io) => {
         });
 
         socket.on('joinPrivateRoom', (data) => {
+            leaveCurrentRoom();
             const roomId = data.roomId.toUpperCase();
+            console.log(`📲 Player ${socket.id} joining private room: ${roomId}`);
             if (rooms[roomId] && rooms[roomId].players.length < 2) {
                 joinOrCreate(roomId, data);
             } else {
+                console.log(`❌ Private room ${roomId} not found or full.`);
                 socket.emit('matchError', { message: "Room not found or full." });
             }
         });
@@ -69,6 +98,8 @@ const socketManager = (io) => {
             socket.join(roomId);
 
             const role = room.players.length === 1 ? 'p1' : 'p2';
+            console.log(`👤 Player ${socket.id} assigned role ${role} in room ${roomId}`);
+
             // Sync jersey color
             room.state[role].color = data.color || (role === 'p1' ? '#3b82f6' : '#ef4444');
 
@@ -80,6 +111,7 @@ const socketManager = (io) => {
             });
 
             if (room.players.length === 2) {
+                console.log(`🎮 Game starting in room ${roomId}`);
                 room.state.status = 'playing';
                 io.to(roomId).emit('gameStart', room.state);
 
@@ -89,20 +121,19 @@ const socketManager = (io) => {
                     if (room.state.status === 'playing') {
                         updatePhysics(room);
 
-                        // Optimized Payload - Send every tick or every other? 60fps might be high for some.
-                        // Let's stick to every tick for now but keep it extremely compact.
+                        // Optimized Payload (v40: Ultra-compact keys)
                         const compactState = {
-                            ball: {
-                                x: Math.round(room.state.ball.x),
-                                y: Math.round(room.state.ball.y),
-                                dx: parseFloat(room.state.ball.dx.toFixed(2)),
-                                dy: parseFloat(room.state.ball.dy.toFixed(2))
+                            b: {
+                                x: Math.round(room.state.b.x),
+                                y: Math.round(room.state.b.y),
+                                dx: parseFloat(room.state.b.dx.toFixed(2)),
+                                dy: parseFloat(room.state.b.dy.toFixed(2))
                             },
                             p1: { x: Math.round(room.state.p1.x), y: Math.round(room.state.p1.y) },
                             p2: { x: Math.round(room.state.p2.x), y: Math.round(room.state.p2.y) },
-                            ts: Date.now()
+                            t: Date.now()
                         };
-                        io.to(roomId).volatile.emit('stateUpdate', compactState);
+                        io.to(roomId).volatile.emit('u', compactState); // 'u' for update
                     } else {
                         clearInterval(room.tickInterval);
                     }
@@ -110,8 +141,13 @@ const socketManager = (io) => {
             }
         }
 
+        // V40: RTT / Ping for clock sync
+        socket.on('p', () => {
+            socket.emit('r'); // 'p' for ping, 'r' for response
+        });
+
         function updatePhysics(room) {
-            const ball = room.state.ball;
+            const ball = room.state.b;
             const p1 = room.state.p1;
             const p2 = room.state.p2;
 
@@ -220,7 +256,7 @@ const socketManager = (io) => {
             if (winnerRole === 'p1') room.state.p1.score++;
             else room.state.p2.score++;
 
-            room.state.ball = { x: 600, y: 400, dx: 0, dy: 0 };
+            room.state.b = { x: 600, y: 400, dx: 0, dy: 0 };
             room.state.p1.x = 240; room.state.p1.y = 400; room.state.p1.dx = 0; room.state.p1.dy = 0;
             room.state.p2.x = 960; room.state.p2.y = 400; room.state.p2.dx = 0; room.state.p2.dy = 0;
 
@@ -228,7 +264,6 @@ const socketManager = (io) => {
                 score1: room.state.p1.score,
                 score2: room.state.p2.score
             });
-
             if (room.state.p1.score >= room.winLimit || room.state.p2.score >= room.winLimit) {
                 const winner = room.state.p1.score >= room.winLimit ? 'Player 1' : 'Player 2';
                 io.to(room.id || currentRoomId).emit('gameOver', { winner });
@@ -236,6 +271,11 @@ const socketManager = (io) => {
                 if (room.tickInterval) clearInterval(room.tickInterval);
             }
         }
+
+        // V40: RTT / Ping for clock sync
+        socket.on('p', () => {
+            socket.emit('r'); // 'p' for ping, 'r' for response
+        });
 
         socket.on('playerUpdate', (data) => {
             if (!currentRoomId || !rooms[currentRoomId]) return;
@@ -256,12 +296,18 @@ const socketManager = (io) => {
         // Physics logic in the main loop now dictates ball movement entirely.
 
         socket.on('disconnect', () => {
+            console.log(`📡 Socket disconnected: ${socket.id}`);
             if (currentRoomId && rooms[currentRoomId]) {
                 const room = rooms[currentRoomId];
                 socket.to(currentRoomId).emit('opponentDisconnected');
                 if (room.tickInterval) clearInterval(room.tickInterval);
                 delete rooms[currentRoomId];
+                console.log(`🗑️ Room ${currentRoomId} deleted.`);
             }
+        });
+
+        socket.on('error', (err) => {
+            console.error(`🔴 Socket error [${socket.id}]:`, err);
         });
     });
 };

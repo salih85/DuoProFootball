@@ -134,8 +134,8 @@ body {
 }
 
 .premium-btn.secondary:hover {
-  background: rgba(239, 68, 68, 0.2) !important;
-  border-color: #ef4444 !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
 }
 
 /* --- Modal & Social UI (v16) --- */
@@ -150,6 +150,11 @@ body {
   border-radius: 24px !important;
   backdrop-filter: blur(20px);
   animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.modal-content.small {
+  max-width: 400px;
+  padding: 2rem;
 }
 
 @keyframes modalPop {
@@ -388,7 +393,8 @@ body {
   width: 100%;
   height: 0;
   /* No height to avoid intercepting touches */
-  z-index: 100;
+  z-index: 3000;
+  /* High enough to be above game overlays */
   pointer-events: none;
 }
 
@@ -470,16 +476,18 @@ body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%) scale(0.5);
-  font-size: 6rem;
-  /* V31: Massive Impact */
+  font-size: 8rem;
+  /* Increased for more impact */
   font-weight: 900;
   color: var(--accent);
   opacity: 0;
   transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  text-shadow: 0 0 30px rgba(0, 0, 0, 0.5), 4px 4px 0px #000;
+  text-shadow: 0 0 50px rgba(0, 0, 0, 0.8), 0 0 20px rgba(251, 191, 36, 0.4);
   white-space: nowrap;
-  z-index: 1000;
+  z-index: 5000;
+  /* Ensure it's above everything including modals */
   pointer-events: none;
+  text-transform: uppercase;
 }
 
 /* V35: Mobile Performance Polish (Zero Lag) */
@@ -496,6 +504,19 @@ body {
     background: rgba(10, 10, 10, 0.95) !important;
     box-shadow: none !important;
     border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  }
+
+  .mid-ui {
+    left: 10px;
+    transform: none;
+    top: 65px;
+    /* Offset for scorecard height */
+    gap: 10px;
+  }
+
+  .exit-btn {
+    padding: 8px 12px !important;
+    border-radius: 12px !important;
   }
 
   .score-card.p1-score,
@@ -520,6 +541,97 @@ body {
 .goal-announcement.show {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1.1);
+}
+
+/* --- Notification System --- */
+.notification-container {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  font-weight: 600;
+  font-size: 0.95rem;
+  animation: toastIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  pointer-events: auto;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.toast.fade-out {
+  animation: toastOut 0.3s ease-in forwards;
+}
+
+@keyframes toastOut {
+  to {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.9);
+  }
+}
+
+/* --- Exit Button --- */
+.mid-ui {
+  position: fixed;
+  top: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  z-index: 3001;
+  /* Above ui-header */
+  pointer-events: none;
+}
+
+.exit-btn {
+  pointer-events: auto;
+  background: rgba(15, 23, 42, 0.6) !important;
+  backdrop-filter: blur(10px);
+  padding: 10px 15px !important;
+  border-radius: 15px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: white !important;
+  font-size: 1.2rem !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.exit-btn:hover {
+  background: rgba(239, 68, 68, 0.4) !important;
+  border-color: #ef4444 !important;
+}
+
+.exit-btn .dots {
+  letter-spacing: -2px;
+  font-weight: 900;
 }
 
 /* --- Pitch Container --- */
@@ -582,7 +694,7 @@ canvas {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.85);
-  z-index: 100;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;

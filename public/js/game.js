@@ -1,4 +1,11 @@
 const socket = io();
+
+// Remote Error Logging for Debugging (v41)
+window.onerror = function (msg, url, lineNo, columnNo, error) {
+    socket.emit('jsError', { msg, url, line: lineNo, col: columnNo, stack: error ? error.stack : '' });
+    return false;
+};
+
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
@@ -60,7 +67,12 @@ let p1Buffer = [];
 let p2Buffer = [];
 let ballBuffer = [];
 let lastResetTime = 0;
-const INTERPOLATION_DELAY = 100; // V31: Reduced to 100ms for more accurate real-time feel
+let lastBallHitTime = 0; // V40: Track local hits
+const INTERPOLATION_DELAY_BASE = 60; // V40: Reduced to 60ms default
+let interpolationDelay = INTERPOLATION_DELAY_BASE;
+let serverClockOffset = 0;
+let lastPingTime = 0;
+let rtt = 0;
 
 // Global Settings (v16)
 let currentAiDifficulty = 'easy';
@@ -94,7 +106,10 @@ function setupModals() {
         openComputerModalBtn.addEventListener('click', () => computerModal.classList.remove('hidden'));
     }
     if (openOnlineModalBtn) {
-        openOnlineModalBtn.addEventListener('click', () => onlineModal.classList.remove('hidden'));
+        openOnlineModalBtn.addEventListener('click', () => {
+            socket.emit('debug', 'Online Modal Opened');
+            onlineModal.classList.remove('hidden');
+        });
     }
 
 
@@ -149,82 +164,149 @@ function setupModals() {
 
     document.getElementById('copyCodeBtn').addEventListener('click', () => {
         navigator.clipboard.writeText(displayRoomCode.innerText);
-        alert('Room code copied!');
+        showNotification('Room code copied!');
     });
+}
+
+
+function showNotification(message) {
+    const container = document.getElementById('notification-container');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerText = message;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Navigation and UI listeners moved to setupInput
+
+
+function startComputerMatch() {
+    status = 'waiting';
+    isPaused = false;
+    gameMode = 'computer';
+    role = 'p1';
+    currentAiDifficulty = 'easy';
+    currentWinLimit = parseInt(compWinLimitSelect.value);
+
+    p1.score = 0; p2.score = 0;
+    score1El.innerText = "0"; score2El.innerText = "0";
+    currentP2Color = '#ef4444'; // AI Default
+    updateScorecardColors();
+
+    computerModal.classList.add('hidden');
+    lobbyOverlay.classList.add('hidden');
+    gameContainer.classList.remove('hidden');
+
+    resizeCanvas();
+    resetMatchLocal();
+    draw(); // Draw behind the countdown
+
+    // Start 5 second countdown
+    countdownOverlay.classList.remove('hidden');
+    countdownText.innerText = "5";
+
+    let counter = 5;
+    if (window.countdownInterval) clearInterval(window.countdownInterval);
+    window.countdownInterval = setInterval(() => {
+        counter--;
+        if (counter > 0) {
+            countdownText.innerText = counter;
+        } else {
+            clearInterval(window.countdownInterval);
+            countdownOverlay.classList.add('hidden');
+
+            resizeCanvas();
+            resetMatchLocal();
+            status = 'playing';
+            // Start loop if not already running (v42: Safe loop start)
+            requestAnimationFrame(loop);
+        }
+    }, 1000);
+}
+
+function startOnlineMatchmaking() {
+    status = 'waiting';
+    isPaused = false;
+    gameMode = 'online';
+    onlineModal.classList.add('hidden');
+    gameContainer.classList.add('hidden'); // Hide game if it was visible
+    lobbyOverlay.classList.remove('hidden'); // Show searching state
+    searchingText.classList.remove('hidden');
+    document.querySelector('.mode-selection').classList.add('hidden');
+
+    // Reset scores locally before search
+    p1.score = 0; p2.score = 0;
+    score1El.innerText = "0"; score2El.innerText = "0";
+
+    if (onlineType === 'random') {
+        socket.emit('findMatch', { color: currentP1Color });
+    } else {
+        const code = joinRoomInput.value.trim().toUpperCase();
+        if (code) {
+            socket.emit('joinPrivateRoom', { roomId: code, color: currentP1Color });
+        } else {
+            if (displayRoomCode.innerText === "----" || displayRoomCode.innerText === "") {
+                showNotification("Please enter a room code or create one.");
+                // Instead of reload, just go back to mode selection
+                lobbyOverlay.classList.remove('hidden');
+                searchingText.classList.add('hidden');
+                document.querySelector('.mode-selection').classList.remove('hidden');
+            } else {
+                // If they created but didn't join... join the one they created
+                socket.emit('joinPrivateRoom', { roomId: displayRoomCode.innerText, color: currentP1Color });
+            }
+        }
+    }
 }
 
 function setupInput() {
     window.addEventListener('keydown', e => keys[e.code] = true);
     window.addEventListener('keyup', e => keys[e.code] = false);
 
-    startComputerBtn.addEventListener('click', () => {
-        gameMode = 'computer';
-        role = 'p1';
-        status = 'waiting';
-        currentAiDifficulty = 'easy';
-        currentWinLimit = parseInt(compWinLimitSelect.value);
-
-        p1.score = 0; p2.score = 0;
-        score1El.innerText = "0"; score2El.innerText = "0";
-        currentP2Color = '#ef4444'; // AI Default
-        updateScorecardColors();
-
-        computerModal.classList.add('hidden');
-        lobbyOverlay.classList.add('hidden');
-        gameContainer.classList.remove('hidden');
-
-        resizeCanvas();
-        resetMatchLocal();
-        draw(); // Draw behind the countdown
-
-        // Start 5 second countdown
-        countdownOverlay.classList.remove('hidden');
-        countdownText.innerText = "5";
-
-        let counter = 5;
-        const countdownInterval = setInterval(() => {
-            counter--;
-            if (counter > 0) {
-                countdownText.innerText = counter;
-            } else {
-                clearInterval(countdownInterval);
-                countdownOverlay.classList.add('hidden');
-
-                resizeCanvas();
-                resetMatchLocal();
-                status = 'playing';
-                requestAnimationFrame(loop);
-            }
-        }, 1000);
-    });
-
-    startOnlineBtn.addEventListener('click', () => {
-        gameMode = 'online';
-        onlineModal.classList.add('hidden');
-        lobbyOverlay.classList.remove('hidden'); // Show searching state
-        searchingText.classList.remove('hidden');
-        document.querySelector('.mode-selection').classList.add('hidden');
-
-        if (onlineType === 'random') {
-            socket.emit('findMatch', { color: currentP1Color });
-        } else {
-            const code = joinRoomInput.value.trim().toUpperCase();
-            if (code) {
-                socket.emit('joinPrivateRoom', { roomId: code, color: currentP1Color });
-            } else {
-                // If they created but didn't join... just wait for opponent? 
-                // Actually they already join on create. So this just handles "Join" case.
-                if (displayRoomCode.innerText === "----") {
-                    alert("Please enter a room code or create one.");
-                    location.reload();
-                }
-            }
-        }
-    });
+    // Main Lobby Buttons
+    startComputerBtn.addEventListener('click', startComputerMatch);
+    startOnlineBtn.addEventListener('click', startOnlineMatchmaking);
 
     cancelSearchBtn.addEventListener('click', () => {
         location.reload();
     });
+
+    // Game UI Buttons
+    const exitMatchBtn = document.getElementById('exitMatchBtn');
+    const exitConfirmModal = document.getElementById('exit-confirm-modal');
+    const confirmExitBtn = document.getElementById('confirmExitBtn');
+    const cancelExitBtn = document.getElementById('cancelExitBtn');
+    const playAgainBtn = document.getElementById('playAgainBtn');
+    const gameOverOverlay = document.getElementById('game-over-overlay');
+
+    if (exitMatchBtn) {
+        exitMatchBtn.addEventListener('click', () => {
+            exitConfirmModal.classList.remove('hidden');
+        });
+    }
+
+    if (confirmExitBtn) {
+        confirmExitBtn.addEventListener('click', () => {
+            location.reload();
+        });
+    }
+
+    if (cancelExitBtn) {
+        cancelExitBtn.addEventListener('click', () => {
+            exitConfirmModal.classList.add('hidden');
+        });
+    }
+
+    if (playAgainBtn) {
+        playAgainBtn.addEventListener('click', () => {
+            location.reload();
+        });
+    }
 }
 
 function setupTouch() {
@@ -283,6 +365,15 @@ socket.on('matchFound', (data) => {
     role = data.role;
     currentWinLimit = data.winLimit;
 
+    // Update Labels
+    const p1Label = document.getElementById('p1-label');
+    const p2Label = document.getElementById('p2-label');
+    if (role === 'p1') {
+        p1Label.innerText = "YOU";
+    } else {
+        p2Label.innerText = "YOU";
+    }
+
     // Sync colors from server state
     currentP1Color = data.state.p1.color;
     currentP2Color = data.state.p2.color;
@@ -292,9 +383,10 @@ socket.on('matchFound', (data) => {
 });
 
 socket.on('matchError', (data) => {
-    alert(data.message);
-    location.reload();
+    showNotification(data.message);
+    setTimeout(() => location.reload(), 2000);
 });
+
 
 socket.on('gameStart', (state) => {
     if (gameMode !== 'online') return;
@@ -311,10 +403,34 @@ socket.on('gameStart', (state) => {
     requestAnimationFrame(loop);
 });
 
-socket.on('stateUpdate', (state) => {
+socket.on('u', (state) => {
     if (gameMode !== 'online') return;
     syncState(state);
 });
+
+// V40: Clock sync response
+socket.on('r', () => {
+    const now = Date.now();
+    const currentRtt = now - lastPingTime;
+    rtt = currentRtt;
+
+    // Simple offset calculation: serverTime = clientTime + offset
+    // state.t is when server sent. arrivalTime is when we receive.
+    // We don't have server time in 'r', but we can estimate offset from next 'u'
+    // or just use this RTT to adjust interpolation delay.
+
+    // Adaptive delay: Base + jitter (simplified as half RTT + 20ms buffer)
+    interpolationDelay = Math.max(INTERPOLATION_DELAY_BASE, (rtt / 2) + 20);
+});
+
+function startPingLoop() {
+    setInterval(() => {
+        lastPingTime = Date.now();
+        socket.emit('p');
+    }, 2000);
+}
+startPingLoop();
+
 
 socket.on('scoreSync', (data) => {
     if (gameMode !== 'online') return;
@@ -357,9 +473,10 @@ socket.on('gameOver', (data) => {
 
 socket.on('opponentDisconnected', () => {
     if (gameMode !== 'online') return;
-    alert("Opponent disconnected. Match ended.");
-    location.reload();
+    showNotification("Opponent disconnected. Match ended.");
+    setTimeout(() => location.reload(), 3000);
 });
+
 
 function syncState(state) {
     // V29: Ignore server updates for 250ms after a local reset to prevent "pull-back" ghosting
@@ -368,10 +485,30 @@ function syncState(state) {
 
     const arrivalTime = Date.now();
 
+    // V40: Handle compact state and calculate clock offset if needed
+    if (state.t) {
+        // Estimate server clock offset on first valid packet
+        const latency = rtt / 2;
+        const estimatedServerTimeAtArrival = state.t + latency;
+        const currentOffset = estimatedServerTimeAtArrival - arrivalTime;
+
+        if (serverClockOffset === 0) {
+            serverClockOffset = currentOffset;
+        } else {
+            // Smoothly adjust offset to account for drift
+            serverClockOffset += (currentOffset - serverClockOffset) * 0.1;
+        }
+    }
+
+    // V40: Handle compact state or legacy state
+    const sP1 = state.p1;
+    const sP2 = state.p2;
+    const sBall = state.b || state.ball;
+
     // Store states in buffers with arrival timestamp
-    if (state.p1) p1Buffer.push({ x: state.p1.x, y: state.p1.y, ts: arrivalTime });
-    if (state.p2) p2Buffer.push({ x: state.p2.x, y: state.p2.y, ts: arrivalTime });
-    if (state.ball) ballBuffer.push({ x: state.ball.x, y: state.ball.y, dx: state.ball.dx, dy: state.ball.dy, ts: arrivalTime });
+    if (sP1) p1Buffer.push({ x: sP1.x, y: sP1.y, ts: state.t || arrivalTime });
+    if (sP2) p2Buffer.push({ x: sP2.x, y: sP2.y, ts: state.t || arrivalTime });
+    if (sBall) ballBuffer.push({ x: sBall.x, y: sBall.y, dx: sBall.dx, dy: sBall.dy, ts: state.t || arrivalTime });
 
     // Keep buffers lean (last 10 states)
     if (p1Buffer.length > 10) p1Buffer.shift();
@@ -390,14 +527,17 @@ function syncState(state) {
             me.y = myState.y;
         } else if (dist > 15) {
             // V37: Increased drift to 0.15 for much snappier response to server position
-            me.x += (myState.x - me.x) * 0.15;
-            me.y += (myState.y - me.y) * 0.15;
+            // V40: Smoother lerp factor when under control
+            me.x += (myState.x - me.x) * 0.1;
+            me.y += (myState.y - me.y) * 0.1;
         }
     }
 }
 
 function interpolate(buffer, delay) {
-    const renderTime = Date.now() - delay;
+    if (buffer.length < 2) return buffer.length > 0 ? buffer[buffer.length - 1] : null;
+
+    const renderTime = Date.now() - delay + serverClockOffset;
 
     // Find two states to interpolate between
     for (let i = 0; i < buffer.length - 1; i++) {
@@ -409,14 +549,27 @@ function interpolate(buffer, delay) {
             return {
                 x: s0.x + (s1.x - s0.x) * t,
                 y: s0.y + (s1.y - s0.y) * t,
-                dx: s0.dx + (s1.dx - s0.dx) * (s0.dx !== undefined ? t : 0), // handle velocity if present
-                dy: s0.dy + (s1.dy - s0.dy) * (s0.dy !== undefined ? t : 0)
+                dx: s0.dx !== undefined ? s0.dx + (s1.dx - s0.dx) * t : 0,
+                dy: s0.dy !== undefined ? s0.dy + (s1.dy - s0.dy) * t : 0
             };
         }
     }
 
+    // Extrapolate if we are slightly ahead of the last packet
+    const last = buffer[buffer.length - 1];
+    const timeDelta = renderTime - last.ts;
+    if (timeDelta > 0 && timeDelta < 100) {
+        // Simple linear extrapolation
+        return {
+            x: last.x + (last.dx || 0) * (timeDelta / 16),
+            y: last.y + (last.dy || 0) * (timeDelta / 16),
+            dx: last.dx || 0,
+            dy: last.dy || 0
+        };
+    }
+
     // Fallback: Latest state
-    return buffer.length > 0 ? buffer[buffer.length - 1] : null;
+    return last;
 }
 
 function showGoal() {
@@ -438,8 +591,8 @@ function update() {
     if (status !== 'playing' || isPaused) return;
 
     let me = role === 'p1' ? p1 : p2;
-    let oldX = me.x;
-    let oldY = me.y;
+    let oldP1X = p1.x, oldP1Y = p1.y;
+    let oldP2X = p2.x, oldP2Y = p2.y;
 
     // Movement logic for current player
     // keyboard
@@ -517,35 +670,46 @@ function update() {
         p2.y = Math.max(p2.radius, Math.min(HEIGHT - p2.radius, p2.y));
     }
 
+    // V42: Calculate deltas for BOTH players for physics inheritance (Pro-fix)
+    p1.dx = p1.x - oldP1X;
+    p1.dy = p1.y - oldP1Y;
+    p2.dx = p2.x - oldP2X;
+    p2.dy = p2.y - oldP2Y;
+
     // Apply Interpolation/Lerping for network entities
     if (gameMode === 'online') {
         let opponent = role === 'p1' ? p2 : p1;
         let oppBuffer = role === 'p1' ? p2Buffer : p1Buffer;
 
-        const oppInterp = interpolate(oppBuffer, INTERPOLATION_DELAY);
+        const oppInterp = interpolate(oppBuffer, interpolationDelay);
         if (oppInterp) {
             opponent.x = oppInterp.x;
             opponent.y = oppInterp.y;
         }
 
         // Interpolate Ball Physics state (optional, or just for visual)
-        const ballInterp = interpolate(ballBuffer, INTERPOLATION_DELAY);
+        const ballInterp = interpolate(ballBuffer, interpolationDelay);
         if (ballInterp) {
             // We still keep the local physics ball for "feeling", but reconcile
             const dist = Math.hypot(ball.x - ballInterp.x, ball.y - ballInterp.y);
-            if (dist > 80) {
+
+            // V42: Dynamic weighting for ball - feel vs authority balance
+            const timeSinceHit = Date.now() - (lastBallHitTime || 0);
+            const trustLocalFactor = timeSinceHit < 400 ? 0.08 : 0.45; // Increased correction speed
+
+            if (dist > 100) {
                 ball.x = ballInterp.x;
                 ball.y = ballInterp.y;
             } else {
-                ball.x += (ballInterp.x - ball.x) * 0.2;
-                ball.y += (ballInterp.y - ball.y) * 0.2;
+                ball.x += (ballInterp.x - ball.x) * trustLocalFactor;
+                ball.y += (ballInterp.y - ball.y) * trustLocalFactor;
             }
             ball.dx = ballInterp.dx;
             ball.dy = ballInterp.dy;
         }
     }
 
-    if (gameMode === 'online' && (me.x !== oldX || me.y !== oldY)) {
+    if (gameMode === 'online' && (me.dx !== 0 || me.dy !== 0)) {
         const now = Date.now();
         // Match client emission to server tick (16ms/60Hz)
         if (now - lastEmitTime > 16) {
@@ -570,18 +734,45 @@ function update() {
 
         if (dist < minPlayerDist) {
             const angle = Math.atan2(dy, dx);
-            const force = 28; // V37: Sync with server hitPower
+            const hitPower = 28;
 
-            // Update local state immediately
-            ball.dx = Math.cos(angle) * force;
-            ball.dy = Math.sin(angle) * force;
+            // V42: Aligned Momentum Inheritance (Match Server)
+            const pVelX = p.dx || 0;
+            const pVelY = p.dy || 0;
+            const pSpeed = Math.hypot(pVelX, pVelY);
 
-            // ANTI-STUCK: Aggressively push ball out of player radius
+            let targetDx = Math.cos(angle) * hitPower;
+            let targetDy = Math.sin(angle) * hitPower;
+
+            if (pSpeed > 1) {
+                const pDirX = pVelX / pSpeed;
+                const pDirY = pVelY / pSpeed;
+                const dot = (targetDx * pDirX + targetDy * pDirY) / hitPower;
+                if (dot < 0.5) {
+                    targetDx = (pDirX * hitPower * 0.9) + (targetDx * 0.1);
+                    targetDy = (pDirY * hitPower * 0.9) + (targetDy * 0.1);
+                }
+            }
+
+            ball.dx = targetDx + (pVelX * 0.45);
+            ball.dy = targetDy + (pVelY * 0.45);
+
+            // Decisive exit speed
+            const newSpeed = Math.hypot(ball.dx, ball.dy);
+            if (newSpeed < 18) {
+                const factor = 18 / (newSpeed || 1);
+                ball.dx *= factor;
+                ball.dy *= factor;
+            }
+
+            // ANTI-STUCK: Aggressively push ball out
             const overlap = minPlayerDist - dist;
-            ball.x += Math.cos(angle) * (overlap + 10); // Offset by 10px buffer
+            ball.x += Math.cos(angle) * (overlap + 10);
             ball.y += Math.sin(angle) * (overlap + 10);
 
-            // V38: Removed ballUpdate emission. Server manages physics entirely.
+            if (p === (role === 'p1' ? p1 : p2)) {
+                lastBallHitTime = Date.now();
+            }
         }
     });
 
@@ -650,17 +841,17 @@ function triggerGameOver(winner) {
 }
 
 function resetMatchLocal() {
+    isPaused = false; // V42: Ensure pause is cleared
     ball.x = WIDTH / 2;
     ball.y = HEIGHT / 2;
+    ball.dx = 0;
+    ball.dy = 0;
     ball.owner = null; // Authority reset
 
-    if (gameMode === 'computer') {
+    if (gameMode === 'computer' && status === 'playing') {
         // Auto-push ball to start the action
         ball.dx = (Math.random() > 0.5 ? 1 : -1) * 6;
         ball.dy = (Math.random() - 0.5) * 8;
-    } else {
-        ball.dx = 0;
-        ball.dy = 0;
     }
 
     p1.x = 240; p1.y = 400;
@@ -751,7 +942,7 @@ function drawPlayer(p) {
     if ((role === 'p1' && p === p1) || (role === 'p2' && p === p2)) {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.radius + 5, 0, Math.PI * 2);
-        ctx.strokeStyle = "yellow";
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
         ctx.lineWidth = 2;
         ctx.stroke();
     }
