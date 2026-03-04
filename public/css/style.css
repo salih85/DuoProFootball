@@ -427,7 +427,7 @@ body {
   -webkit-user-drag: none;
   contain: layout;
   /* v33: Allow pulse */
-  will-change: transform, box-shadow;
+  will-change: transform, box-shadow, opacity;
   transition: box-shadow 0.3s ease;
 }
 
@@ -481,6 +481,7 @@ body {
   font-weight: 900;
   color: var(--accent);
   opacity: 0;
+  will-change: transform, opacity;
   transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   text-shadow: 0 0 50px rgba(0, 0, 0, 0.8), 0 0 20px rgba(251, 191, 36, 0.4);
   white-space: nowrap;
@@ -704,17 +705,7 @@ canvas {
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
-/* Buttons */
-.premium-btn {
-  background: #fff;
-  color: #000;
-  border: 4px solid #ccc;
-  padding: 0.8rem 1.5rem;
-  font-size: 1.1rem;
-  font-weight: 700;
-  cursor: pointer;
-  text-transform: uppercase;
-}
+/* Legacy buttons removed for premium consistency */
 
 /* --- Orientation & Device Optimizations --- */
 @media (orientation: portrait) {

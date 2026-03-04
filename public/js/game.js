@@ -12,7 +12,7 @@ const ctx = canvas.getContext("2d");
 // Constants
 const WIDTH = 1200;
 const HEIGHT = 800;
-const FRICTION = 0.99;
+const FRICTION = 0.992; // V46: Adjusted for 50Hz frequency (originally 0.99)
 const PLAYER_SPEED = 10;
 const BALL_MAX_SPEED = 42; // V37: Sync with server MAX_SPEED
 const GOAL_WIDTH = 30;
@@ -68,7 +68,7 @@ let p2Buffer = [];
 let ballBuffer = [];
 let lastResetTime = 0;
 let lastBallHitTime = 0; // V40: Track local hits
-const INTERPOLATION_DELAY_BASE = 60; // V40: Reduced to 60ms default
+const INTERPOLATION_DELAY_BASE = 90; // V46: Balanced 90ms for mobile stability
 let interpolationDelay = INTERPOLATION_DELAY_BASE;
 let serverClockOffset = 0;
 let lastPingTime = 0;
@@ -584,7 +584,7 @@ function showGoal() {
         goalTextEl.classList.remove('show');
         resetMatchLocal(); // RE-SET FOR RESUME
         isPaused = false;
-    }, 1500);
+    }, 1200); // V46: Reduced to 1.2s for faster resumption after rejection
 }
 
 function update() {
@@ -616,48 +616,55 @@ function update() {
         }
     }
 
-    // AI logic for computer player
+    // AI logic for computer player (v44: Refined Easy Mode)
     if (gameMode === 'computer') {
         const difficultyMultipliers = {
-            'easy': { speed: 0.6, ease: 0.08, prediction: 2 },
-            'pro': { speed: 0.9, ease: 0.12, prediction: 4 },
-            'legend': { speed: 1.2, ease: 0.2, prediction: 7 }
+            'easy': { maxSpeed: 5.5, ease: 0.08, prediction: 1.5 }, // V46: True "Easy Mood" (slower than original)
+            'pro': { maxSpeed: 9.5, ease: 0.18, prediction: 5 },
+            'legend': { maxSpeed: 13, ease: 0.25, prediction: 8 }
         };
         const settings = difficultyMultipliers[currentAiDifficulty];
         const aiEase = settings.ease;
 
-        // AI PATIENCE: Stay at goal line until ball starts moving
         const ballInPlay = Math.abs(ball.dx) > 0.1 || Math.abs(ball.dy) > 0.1;
-
-        // CORNER CHECK: If AI is in the corner, escape!
         const isInCorner = (p2.x > WIDTH - 100 && (p2.y < 100 || p2.y > HEIGHT - 100));
 
         let targetY, targetX;
 
         if (!ballInPlay) {
-            // Kickoff Position
             targetY = HEIGHT / 2;
             targetX = 960;
         } else if (isInCorner) {
-            // Safety: Move back toward the center of the half
             targetY = HEIGHT / 2;
             targetX = WIDTH * 0.8;
         } else {
-            // Standard tracking logic
+            // Predict ball path
             targetY = ball.y + ball.dy * settings.prediction;
             targetY = Math.max(p2.radius, Math.min(HEIGHT - p2.radius, targetY));
 
-            if (ball.x > WIDTH * 0.45) {
-                // Chases ball up to the halfway line
-                targetX = Math.max(WIDTH * 0.55, ball.x - 40);
+            if (ball.x > WIDTH * 0.45) { // Maintain defensive line
+                targetX = Math.max(WIDTH * 0.55, ball.x - 20);
             } else {
-                // Retreats to defend
                 targetX = WIDTH * 0.88;
             }
         }
 
-        p2.y += (targetY - p2.y) * aiEase;
-        p2.x += (targetX - p2.x) * aiEase;
+        // Apply smooth lerping with capped speed for AI
+        const dy = (targetY - p2.y) * aiEase;
+        const dx = (targetX - p2.x) * aiEase;
+        const moveDist = Math.hypot(dx, dy);
+
+        if (moveDist > settings.maxSpeed) {
+            p2.x += (dx / moveDist) * settings.maxSpeed;
+            p2.y += (dy / moveDist) * settings.maxSpeed;
+        } else {
+            p2.x += dx;
+            p2.y += dy;
+        }
+
+        // Calculate velocity for physics inheritance
+        p2.dx = p2.x - oldP2X;
+        p2.dy = p2.y - oldP2Y;
     }
 
     // boundaries
@@ -841,7 +848,6 @@ function triggerGameOver(winner) {
 }
 
 function resetMatchLocal() {
-    isPaused = false; // V42: Ensure pause is cleared
     ball.x = WIDTH / 2;
     ball.y = HEIGHT / 2;
     ball.dx = 0;
@@ -849,13 +855,18 @@ function resetMatchLocal() {
     ball.owner = null; // Authority reset
 
     if (gameMode === 'computer' && status === 'playing') {
-        // Auto-push ball to start the action
-        ball.dx = (Math.random() > 0.5 ? 1 : -1) * 6;
-        ball.dy = (Math.random() - 0.5) * 8;
+        const angle = (Math.random() - 0.5) * Math.PI / 4;
+        const side = Math.random() > 0.5 ? 1 : -1;
+        ball.dx = side * Math.cos(angle) * 12; // V43: Increased kickoff power
+        ball.dy = Math.sin(angle) * 12;
     }
 
     p1.x = 240; p1.y = 400;
     p2.x = 960; p2.y = 400;
+
+    // V44: Reset old positions to prevent velocity spikes on first frame after reset
+    oldP1X = p1.x; oldP1Y = p1.y;
+    oldP2X = p2.x; oldP2Y = p2.y;
 
     // Reset targets and buffers too so they don't lerp across the field
     p1Buffer = [];
@@ -953,13 +964,13 @@ function drawBall() {
     // V19: Pure Visual Lerping to hide jitter
     // V29: Instant teleport if distance is too large (prevents "disappearing" on goal)
     const dist = Math.hypot(ball.x - visualBall.x, ball.y - visualBall.y);
-    if (dist > 150) {
+    if (dist > 120) {
         visualBall.x = ball.x;
         visualBall.y = ball.y;
     } else {
-        // V31: Increased lerp factor to 0.7 for snappier ball movement
-        visualBall.x += (ball.x - visualBall.x) * 0.7;
-        visualBall.y += (ball.y - visualBall.y) * 0.7;
+        // V44: Smoother lerp factor for 40Hz server updates
+        visualBall.x += (ball.x - visualBall.x) * 0.15;
+        visualBall.y += (ball.y - visualBall.y) * 0.15;
     }
 
     ctx.translate(visualBall.x, visualBall.y);

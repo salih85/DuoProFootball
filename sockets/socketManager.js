@@ -10,7 +10,7 @@ const INITIAL_STATE = {
 // Constants shared with client
 const WIDTH = 1200;
 const HEIGHT = 800;
-const FRICTION = 0.99;
+const FRICTION = 0.992; // V46: Adjusted for 50Hz freq to prevent "slow ball" feel
 const BALL_RADIUS = 18;
 const PLAYER_RADIUS = 35;
 const GOAL_WIDTH = 30;
@@ -121,13 +121,13 @@ const socketManager = (io) => {
                     if (room.state.status === 'playing') {
                         updatePhysics(room);
 
-                        // Optimized Payload (v40: Ultra-compact keys)
+                        // Optimized Payload (v43: Rounded for BW/Lag reduction)
                         const compactState = {
                             b: {
-                                x: Math.round(room.state.b.x),
-                                y: Math.round(room.state.b.y),
-                                dx: parseFloat(room.state.b.dx.toFixed(2)),
-                                dy: parseFloat(room.state.b.dy.toFixed(2))
+                                x: Math.round(room.state.b.x * 10) / 10,
+                                y: Math.round(room.state.b.y * 10) / 10,
+                                dx: parseFloat(room.state.b.dx.toFixed(1)),
+                                dy: parseFloat(room.state.b.dy.toFixed(1))
                             },
                             p1: { x: Math.round(room.state.p1.x), y: Math.round(room.state.p1.y) },
                             p2: { x: Math.round(room.state.p2.x), y: Math.round(room.state.p2.y) },
@@ -137,7 +137,7 @@ const socketManager = (io) => {
                     } else {
                         clearInterval(room.tickInterval);
                     }
-                }, 16); // ~60Hz
+                }, 20); // V46: 20ms (50Hz) for improved smoothness on mobile/web
             }
         }
 
