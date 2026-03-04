@@ -68,7 +68,7 @@ let p2Buffer = [];
 let ballBuffer = [];
 let lastResetTime = 0;
 let lastBallHitTime = 0; // V40: Track local hits
-const INTERPOLATION_DELAY_BASE = 90; // V46: Balanced 90ms for mobile stability
+const INTERPOLATION_DELAY_BASE = 110; // V47: Increased to 110ms for deployed stability on Render
 let interpolationDelay = INTERPOLATION_DELAY_BASE;
 let serverClockOffset = 0;
 let lastPingTime = 0;
@@ -517,10 +517,10 @@ function syncState(state) {
     if (sP2) p2Buffer.push({ x: sP2.x, y: sP2.y, ts: state.t || arrivalTime });
     if (sBall) ballBuffer.push({ x: sBall.x, y: sBall.y, dx: sBall.dx, dy: sBall.dy, ts: state.t || arrivalTime });
 
-    // Keep buffers lean (last 10 states)
-    if (p1Buffer.length > 10) p1Buffer.shift();
-    if (p2Buffer.length > 10) p2Buffer.shift();
-    if (ballBuffer.length > 10) ballBuffer.shift();
+    // Keep buffers lean (last 30 states / ~600ms history for Render stability)
+    if (p1Buffer.length > 30) p1Buffer.shift();
+    if (p2Buffer.length > 30) p2Buffer.shift();
+    if (ballBuffer.length > 30) ballBuffer.shift();
 
     // Reconciliation for the LOCAL player
     let me = role === 'p1' ? p1 : p2;

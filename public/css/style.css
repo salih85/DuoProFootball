@@ -508,8 +508,9 @@ body {
   }
 
   .mid-ui {
-    left: auto;
-    right: 15px;
+    left: 15px;
+    /* V47: Move to Top-Left on Mobile so it doesn't hit the "OPPONENT" text on right */
+    right: auto;
     transform: none;
     top: 15px;
     gap: 10px;
