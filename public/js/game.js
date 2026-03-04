@@ -198,6 +198,11 @@ function startComputerMatch() {
     currentP2Color = '#ef4444'; // AI Default
     updateScorecardColors();
 
+    const p1Label = document.getElementById('p1-label');
+    const p2Label = document.getElementById('p2-label');
+    if (p1Label) p1Label.innerText = "YOU";
+    if (p2Label) p2Label.innerText = "COMPUTER";
+
     computerModal.classList.add('hidden');
     lobbyOverlay.classList.add('hidden');
     gameContainer.classList.remove('hidden');
@@ -370,8 +375,10 @@ socket.on('matchFound', (data) => {
     const p2Label = document.getElementById('p2-label');
     if (role === 'p1') {
         p1Label.innerText = "YOU";
+        p2Label.innerText = "OPPONENT";
     } else {
         p2Label.innerText = "YOU";
+        p1Label.innerText = "OPPONENT";
     }
 
     // Sync colors from server state
