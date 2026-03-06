@@ -137,7 +137,7 @@ const socketManager = (io) => {
                     } else {
                         clearInterval(room.tickInterval);
                     }
-                }, 20); // V46: 20ms (50Hz) for improved smoothness on mobile/web
+                }, 16); // V49: 16ms (60Hz) for maximum smoothness and alignment with client
             }
         }
 

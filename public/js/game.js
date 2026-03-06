@@ -68,7 +68,8 @@ let p2Buffer = [];
 let ballBuffer = [];
 let lastResetTime = 0;
 let lastBallHitTime = 0; // V40: Track local hits
-const INTERPOLATION_DELAY_BASE = 140; // V48: Increased to 140ms for high stability on Render.com
+const INTERPOLATION_DELAY_BASE = 80; // V49: Reduced to 80ms for snappier online play (was 140ms)
+const INTERPOLATION_DELAY_MAX = 250; // V49: Cap for stability
 let interpolationDelay = INTERPOLATION_DELAY_BASE;
 let serverClockOffset = 0;
 let lastPingTime = 0;
@@ -427,7 +428,10 @@ socket.on('r', () => {
     // or just use this RTT to adjust interpolation delay.
 
     // Adaptive delay: Base + jitter (simplified as half RTT + 20ms buffer)
-    interpolationDelay = Math.max(INTERPOLATION_DELAY_BASE, (rtt / 2) + 20);
+    // Adaptive delay: Base + jitter (simplified as half RTT + 20ms buffer)
+    const targetDelay = Math.max(INTERPOLATION_DELAY_BASE, Math.min(INTERPOLATION_DELAY_MAX, (rtt / 2) + 20));
+    // Smoothly adjust interpolation delay to avoid jumps
+    interpolationDelay += (targetDelay - interpolationDelay) * 0.1;
 });
 
 function startPingLoop() {
