@@ -15,6 +15,7 @@ const viewRoutes = require('./routes/viewRoutes');
 const socketManager = require('./sockets/socketManager');
 const errorHandler = require('./middleware/errorMiddleware');
 
+
 // Initialize App & Server
 const app = express();
 const server = http.createServer(app);
