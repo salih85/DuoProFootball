@@ -12,7 +12,7 @@ const ctx = canvas.getContext("2d");
 
 const WIDTH = 1200;
 const HEIGHT = 800;
-const FRICTION = 0.992; 
+const FRICTION = 0.992;
 const PLAYER_SPEED = 10;
 const BALL_MAX_SPEED = 42;
 const GOAL_WIDTH = 30;
@@ -48,13 +48,13 @@ const countdownText = document.getElementById('countdown-text');
 let role = null;
 let roomId = null;
 let status = 'waiting';
-let gameMode = 'online'; 
+let gameMode = 'online';
 let onlineType = 'random';
 let isVertical = false;
 let isPaused = false;
 let keys = {};
 let targetTouchPos = null;
-let cachedRect = null; 
+let cachedRect = null;
 let ball = { x: WIDTH / 2, y: HEIGHT / 2, radius: 18, dx: 0, dy: 0, owner: null };
 let visualBall = { x: WIDTH / 2, y: HEIGHT / 2 };
 let p1 = { x: 240, y: 400, radius: 35, color: '#3b82f6', score: 0 };
@@ -406,7 +406,7 @@ socket.on('gameStart', (state) => {
     // CRITICAL: Force resize after showing container to fix rendering bug
     resizeCanvas();
     setTimeout(resizeCanvas, 50);
-    setTimeout(resizeCanvas, 150); 
+    setTimeout(resizeCanvas, 150);
 
     requestAnimationFrame(loop);
 });
@@ -423,7 +423,7 @@ socket.on('r', () => {
     rtt = currentRtt;
 
     const targetDelay = Math.max(INTERPOLATION_DELAY_BASE, Math.min(INTERPOLATION_DELAY_MAX, (rtt / 2) + 20));
- 
+
     interpolationDelay += (targetDelay - interpolationDelay) * 0.1;
 });
 
@@ -471,8 +471,18 @@ socket.on('scoreSync', (data) => {
 
 socket.on('gameOver', (data) => {
     status = 'finished';
-    document.getElementById('game-over-overlay').classList.remove('hidden');
-    document.getElementById('winner-text').innerText = `${data.winner} Wins!`;
+    const overlay = document.getElementById('game-over-overlay');
+    const winText = document.getElementById('winner-text');
+    overlay.classList.remove('hidden');
+
+    const winnerIsMe = (role === 'p1' && data.winner === 'Player 1') || (role === 'p2' && data.winner === 'Player 2');
+    if (winnerIsMe) {
+        winText.innerText = "YOU WIN!";
+        winText.style.color = "#22c55e"; 
+    } else {
+        winText.innerText = "OPPONENT WINS!";
+        winText.style.color = "#ef4444"; 
+    }
 });
 
 socket.on('opponentDisconnected', () => {
@@ -729,7 +739,7 @@ function update() {
         }
     }
 
-    
+
     ball.x += ball.dx;
     ball.y += ball.dy;
     ball.dx *= FRICTION;
@@ -863,8 +873,17 @@ function update() {
 
 function triggerGameOver(winner) {
     status = 'finished';
-    document.getElementById('game-over-overlay').classList.remove('hidden');
-    document.getElementById('winner-text').innerText = `${winner} Wins!`;
+    const overlay = document.getElementById('game-over-overlay');
+    const winText = document.getElementById('winner-text');
+    overlay.classList.remove('hidden');
+
+    if (winner === 'Player 1') {
+        winText.innerText = "YOU WIN!";
+        winText.style.color = "#22c55e";
+    } else {
+        winText.innerText = "COMPUTER WINS!";
+        winText.style.color = "#ef4444";
+    }
 }
 
 function resetMatchLocal() {
