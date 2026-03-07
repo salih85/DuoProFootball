@@ -1,6 +1,6 @@
 const socket = io();
 
-// Remote Error Logging for Debugging (v41)
+
 window.onerror = function (msg, url, lineNo, columnNo, error) {
     socket.emit('jsError', { msg, url, line: lineNo, col: columnNo, stack: error ? error.stack : '' });
     return false;
@@ -9,17 +9,17 @@ window.onerror = function (msg, url, lineNo, columnNo, error) {
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// Constants
+
 const WIDTH = 1200;
 const HEIGHT = 800;
-const FRICTION = 0.992; // V46: Adjusted for 50Hz frequency (originally 0.99)
+const FRICTION = 0.992; 
 const PLAYER_SPEED = 10;
-const BALL_MAX_SPEED = 42; // V37: Sync with server MAX_SPEED
+const BALL_MAX_SPEED = 42;
 const GOAL_WIDTH = 30;
 const GOAL_HEIGHT = 240;
 const GOAL_Y = (HEIGHT - GOAL_HEIGHT) / 2;
 
-// UI Elements
+
 const lobbyOverlay = document.getElementById('lobby-overlay');
 const gameContainer = document.getElementById('game-container');
 const openComputerModalBtn = document.getElementById('openComputerModal');
@@ -32,7 +32,7 @@ const score1El = document.getElementById('score1');
 const score2El = document.getElementById('score2');
 const goalTextEl = document.getElementById('goalText');
 
-// Modal Elements (v16)
+
 const startComputerBtn = document.getElementById('startComputerBtn');
 const startOnlineBtn = document.getElementById('startOnlineBtn');
 const compWinLimitSelect = document.getElementById('compWinLimit');
@@ -44,23 +44,23 @@ const roomCodeArea = document.getElementById('roomCodeArea');
 const countdownOverlay = document.getElementById('countdown-overlay');
 const countdownText = document.getElementById('countdown-text');
 
-// Game State
-let role = null; // 'p1' or 'p2'
+
+let role = null;
 let roomId = null;
 let status = 'waiting';
-let gameMode = 'online'; // 'online' or 'computer'
-let onlineType = 'random'; // 'random' or 'private'
+let gameMode = 'online'; 
+let onlineType = 'random';
 let isVertical = false;
 let isPaused = false;
 let keys = {};
 let targetTouchPos = null;
-let cachedRect = null; // V27: Cache for mobile performance
+let cachedRect = null; 
 let ball = { x: WIDTH / 2, y: HEIGHT / 2, radius: 18, dx: 0, dy: 0, owner: null };
-let visualBall = { x: WIDTH / 2, y: HEIGHT / 2 }; // V19: Smooth rendering ball
+let visualBall = { x: WIDTH / 2, y: HEIGHT / 2 };
 let p1 = { x: 240, y: 400, radius: 35, color: '#3b82f6', score: 0 };
 let p2 = { x: 960, y: 400, radius: 35, color: '#ef4444', score: 0 };
 
-// Network Sync State (v20: Interpolation & Buffering)
+
 let lastEmitTime = 0;
 let lastBallEmitTime = 0;
 let p1Buffer = [];
@@ -75,7 +75,7 @@ let serverClockOffset = 0;
 let lastPingTime = 0;
 let rtt = 0;
 
-// Global Settings (v16)
+
 let currentAiDifficulty = 'easy';
 let currentWinLimit = 5;
 let currentP1Color = '#3b82f6';
@@ -406,7 +406,7 @@ socket.on('gameStart', (state) => {
     // CRITICAL: Force resize after showing container to fix rendering bug
     resizeCanvas();
     setTimeout(resizeCanvas, 50);
-    setTimeout(resizeCanvas, 150); // Extra safety for slow mobile engines
+    setTimeout(resizeCanvas, 150); 
 
     requestAnimationFrame(loop);
 });
@@ -416,21 +416,14 @@ socket.on('u', (state) => {
     syncState(state);
 });
 
-// V40: Clock sync response
+
 socket.on('r', () => {
     const now = Date.now();
     const currentRtt = now - lastPingTime;
     rtt = currentRtt;
 
-    // Simple offset calculation: serverTime = clientTime + offset
-    // state.t is when server sent. arrivalTime is when we receive.
-    // We don't have server time in 'r', but we can estimate offset from next 'u'
-    // or just use this RTT to adjust interpolation delay.
-
-    // Adaptive delay: Base + jitter (simplified as half RTT + 20ms buffer)
-    // Adaptive delay: Base + jitter (simplified as half RTT + 20ms buffer)
     const targetDelay = Math.max(INTERPOLATION_DELAY_BASE, Math.min(INTERPOLATION_DELAY_MAX, (rtt / 2) + 20));
-    // Smoothly adjust interpolation delay to avoid jumps
+ 
     interpolationDelay += (targetDelay - interpolationDelay) * 0.1;
 });
 
@@ -526,21 +519,21 @@ function syncState(state) {
     if (p2Buffer.length > 30) p2Buffer.shift();
     if (ballBuffer.length > 30) ballBuffer.shift();
 
-    // Reconciliation for the LOCAL player
+    // Reconciliation for the LOCAL player (v50: Human-Centric Feedback)
     let me = role === 'p1' ? p1 : p2;
     let myState = role === 'p1' ? state.p1 : state.p2;
 
     if (myState) {
         const dist = Math.hypot(me.x - myState.x, me.y - myState.y);
-        // If deviates too much from server (> 120px), snap to server
-        if (dist > 120) {
+        // If deviates significantly (> 160px), snap hard
+        if (dist > 160) {
             me.x = myState.x;
             me.y = myState.y;
-        } else if (dist > 15) {
-            // V37: Increased drift to 0.15 for much snappier response to server position
-            // V40: Smoother lerp factor when under control
-            me.x += (myState.x - me.x) * 0.1;
-            me.y += (myState.y - me.y) * 0.1;
+        } else if (dist > 40) {
+            // V50: Much softer lerp for minor deviations (prevents "heavy" feeling)
+            // Only pull back if we're stagnant or moving in a different direction
+            me.x += (myState.x - me.x) * 0.05;
+            me.y += (myState.y - me.y) * 0.05;
         }
     }
 }
@@ -736,8 +729,7 @@ function update() {
         }
     }
 
-    // collision logic
-    // Ball movement
+    
     ball.x += ball.dx;
     ball.y += ball.dy;
     ball.dx *= FRICTION;
@@ -794,18 +786,35 @@ function update() {
         }
     });
 
-    // Player Reflection
+    // Player-Player Collisions (v50: Authority Mode)
     const pDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
     if (pDist < p1.radius + p2.radius) {
-        const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-        const overlap = (p1.radius + p2.radius - pDist) / 2;
-        if (gameMode === 'computer' || role === 'p1') {
+        // In Computer mode, we resolve fully locally
+        if (gameMode === 'computer') {
+            const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+            const overlap = (p1.radius + p2.radius - pDist) / 2;
             p1.x -= Math.cos(angle) * overlap;
             p1.y -= Math.sin(angle) * overlap;
-        }
-        if (gameMode === 'computer' || role === 'p2') {
             p2.x += Math.cos(angle) * overlap;
             p2.y += Math.sin(angle) * overlap;
+        }
+        // In Online mode, we DON'T pull the opponent.
+        // The server will calculate the impact and the syncState will move them.
+        // This prevents the "stretching" or "stutter" feel on collisions.
+        else {
+            const angle = Math.atan2(role === 'p1' ? p2.y - p1.y : p1.y - p2.y, role === 'p1' ? p2.x - p1.x : p1.x - p2.x);
+            const overlap = (p1.radius + p2.radius - pDist);
+            const side = role === 'p1' ? -1 : 1;
+
+            // Only push the LOCAL player back slightly to simulate solid contact
+            // without fighting the server's position for the opponent.
+            if (role === 'p1') {
+                p1.x += Math.cos(angle) * overlap * -0.5;
+                p1.y += Math.sin(angle) * overlap * -0.5;
+            } else {
+                p2.x += Math.cos(angle) * overlap * 0.5;
+                p2.y += Math.sin(angle) * overlap * 0.5;
+            }
         }
     }
 

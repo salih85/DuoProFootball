@@ -1,16 +1,16 @@
-const rooms = {}; // stores state for each match: { roomId: { players: [], state: {...} } }
+const rooms = {};
 
 const INITIAL_STATE = {
     b: { x: 600, y: 400, dx: 0, dy: 0, owner: null },
     p1: { x: 240, y: 400, dx: 0, dy: 0, score: 0 },
     p2: { x: 960, y: 400, dx: 0, dy: 0, score: 0 },
-    status: 'waiting' // waiting, playing, finished
+    status: 'waiting'
 };
 
 // Constants shared with client
 const WIDTH = 1200;
 const HEIGHT = 800;
-const FRICTION = 0.992; // V46: Adjusted for 50Hz freq to prevent "slow ball" feel
+const FRICTION = 0.992;
 const BALL_RADIUS = 18;
 const PLAYER_RADIUS = 35;
 const GOAL_WIDTH = 30;
@@ -56,7 +56,7 @@ const socketManager = (io) => {
                     players: [],
                     state: JSON.parse(JSON.stringify(INITIAL_STATE)),
                     isPrivate: false,
-                    winLimit: 5 // Default for public matches
+                    winLimit: 5
                 };
             } else {
                 console.log(`🤝 Found existing room: ${roomId}`);
@@ -100,7 +100,7 @@ const socketManager = (io) => {
             const role = room.players.length === 1 ? 'p1' : 'p2';
             console.log(`👤 Player ${socket.id} assigned role ${role} in room ${roomId}`);
 
-            // Sync jersey color
+        
             room.state[role].color = data.color || (role === 'p1' ? '#3b82f6' : '#ef4444');
 
             socket.emit('matchFound', {
@@ -115,13 +115,13 @@ const socketManager = (io) => {
                 room.state.status = 'playing';
                 io.to(roomId).emit('gameStart', room.state);
 
-                // Start Server-side Tick (v20: High-frequency Authoritative Physics)
+                
                 if (room.tickInterval) clearInterval(room.tickInterval);
                 room.tickInterval = setInterval(() => {
                     if (room.state.status === 'playing') {
                         updatePhysics(room);
 
-                        // Optimized Payload (v43: Rounded for BW/Lag reduction)
+                        
                         const compactState = {
                             b: {
                                 x: Math.round(room.state.b.x * 10) / 10,
@@ -133,11 +133,11 @@ const socketManager = (io) => {
                             p2: { x: Math.round(room.state.p2.x), y: Math.round(room.state.p2.y) },
                             t: Date.now()
                         };
-                        io.to(roomId).volatile.emit('u', compactState); // 'u' for update
+                        io.to(roomId).volatile.emit('u', compactState);
                     } else {
                         clearInterval(room.tickInterval);
                     }
-                }, 16); // V49: 16ms (60Hz) for maximum smoothness and alignment with client
+                }, 16);
             }
         }
 
@@ -151,7 +151,7 @@ const socketManager = (io) => {
             const p1 = room.state.p1;
             const p2 = room.state.p2;
 
-            // 1. Move Ball
+          
             ball.x += ball.dx;
             ball.y += ball.dy;
             ball.dx *= FRICTION;
@@ -202,9 +202,9 @@ const socketManager = (io) => {
                 if (dist < minPlayerDist) {
                     const angle = Math.atan2(dy, dx);
 
-                    // V36: Final Hardened Directional Momentum
-                    // Force ball in player's path and ensure a decisive exit
-                    const hitPower = 28; // v36: Snappier power
+                   
+                   
+                    const hitPower = 28; 
                     const pVelX = p.dx || 0;
                     const pVelY = p.dy || 0;
                     const pSpeed = Math.hypot(pVelX, pVelY);
@@ -250,6 +250,26 @@ const socketManager = (io) => {
                     ball.y += Math.sin(angle) * (overlap + 8);
                 }
             });
+
+            // 5. Player-Player Collisions (v50: Server Authority)
+            const pDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+            const minPPDist = PLAYER_RADIUS * 2;
+            if (pDist < minPPDist) {
+                const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+                const overlap = (minPPDist - pDist) / 2;
+
+                // Push both apart equally to resolve overlap
+                p1.x -= Math.cos(angle) * overlap;
+                p1.y -= Math.sin(angle) * overlap;
+                p2.x += Math.cos(angle) * overlap;
+                p2.y += Math.sin(angle) * overlap;
+
+                // Enforce boundaries after push
+                [p1, p2].forEach(p => {
+                    p.x = Math.max(PLAYER_RADIUS, Math.min(WIDTH - PLAYER_RADIUS, p.x));
+                    p.y = Math.max(PLAYER_RADIUS, Math.min(HEIGHT - PLAYER_RADIUS, p.y));
+                });
+            }
         }
 
         function handleGoal(room, winnerRole) {
@@ -274,7 +294,7 @@ const socketManager = (io) => {
 
         // V40: RTT / Ping for clock sync
         socket.on('p', () => {
-            socket.emit('r'); // 'p' for ping, 'r' for response
+            socket.emit('r');
         });
 
         socket.on('playerUpdate', (data) => {
@@ -283,18 +303,16 @@ const socketManager = (io) => {
             const role = room.players[0] === socket.id ? 'p1' : 'p2';
 
             const p = room.state[role];
-            // V32: Calculate velocity for collision bias
+    
             p.dx = data.x - p.x;
             p.dy = data.y - p.y;
 
-            // V38: Enforce field boundaries and clean coordinates on server
+
             p.x = Math.max(PLAYER_RADIUS, Math.min(WIDTH - PLAYER_RADIUS, data.x || 0));
             p.y = Math.max(PLAYER_RADIUS, Math.min(HEIGHT - PLAYER_RADIUS, data.y || 0));
         });
 
-        // V38: Total Server Authority (REMOVED ballUpdate handler)
-        // Physics logic in the main loop now dictates ball movement entirely.
-
+    
         socket.on('disconnect', () => {
             console.log(`📡 Socket disconnected: ${socket.id}`);
             if (currentRoomId && rooms[currentRoomId]) {
